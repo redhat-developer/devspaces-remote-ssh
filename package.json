@@ -1,0 +1,78 @@
+{
+	"name": "devspaces-remote",
+	"displayName": "VS Code Dev Spaces",
+	"description": "Support for connecting local a VS Code instance to a Dev Workspace under Red Hat OpenShift Dev Spaces",
+	"version": "0.0.1",
+	"publisher": "redhat",
+	"repository": "https://github.com/redhat-developer/vscode-devspaces",
+	"engines": {
+		"vscode": "^1.100.0"
+	},
+	"categories": [
+		"Other"
+	],
+	"activationEvents": [
+		"onView:remoteTargets"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"menus": {
+			"view/item/context": [
+				{
+					"command": "devspaces.connect.cluster",
+					"group": "navigation",
+					"when": "viewItem == remote-explorer.sshGroup"
+				},
+				{
+					"command": "devspaces.connect.cluster",
+					"group": "inline",
+					"when": "viewItem == remote-explorer.sshGroup"
+				}
+			],
+			"view/title": [
+				{
+					"command": "devspaces.connect.cluster",
+					"group": "navigation",
+					"when": "view == remoteTargets"
+				},
+				{
+					"command": "devspaces.connect.cluster",
+					"group": "inline",
+					"when": "view == remoteTargets"
+				}
+			]
+		},
+		"commands": [
+			{
+				"command": "devspaces.connect.cluster",
+				"title": "Connect to Dev Spaces",
+				"icon": {
+					"light": "images/devspaces-icon.png",
+					"dark": "images/devspaces-icon.png"
+				}
+			},
+			{
+				"command": "devspaces.get.devworkspaces",
+				"title": "Get Dev Workspaces"
+			}
+		]
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"lint": "eslint",
+		"watch": "tsc -watch -p ./"
+	},
+	"dependencies": {
+		"ssh-config": "^5.0.4"
+	},
+	"devDependencies": {
+		"@eslint/js": "^9.13.0",
+		"@stylistic/eslint-plugin": "^2.9.0",
+		"@types/node": "^22",
+		"@types/vscode": "^1.100.0",
+		"eslint": "^9.13.0",
+		"typescript": "^5.8.2",
+		"typescript-eslint": "^8.26.0"
+	}
+}
