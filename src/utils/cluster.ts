@@ -35,7 +35,7 @@ export async function isCodeSSHDWorkspace(podName: string): Promise<boolean> {
     await isCodeSSHDWorkspaceCmd.spawn(`oc set env pod/${podName} --list`);
     const stdout = isCodeSSHDWorkspaceCmd.getOutput();
     return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd');
-    // TODO : or check the main url
+    // TODO: Check the main url
 }
 
 export async function isDevSpaces324(podName: string): Promise<boolean> {
@@ -97,4 +97,6 @@ Host ${devworkspaceId}
   IdentityFile ${identityPath}
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}
   ProxyCommand sh -c "oc port-forward -n ${namespace} ${podName} ${port}:${port} & sleep 1s; nc -w 5 127.0.0.1 ${port}"`;
+  // TODO: We can support multiple connections by specifying a different local port
+  // TODO: ProxyCommand may not be ideal for Windows
 }

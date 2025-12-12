@@ -1,7 +1,7 @@
 {
-	"name": "devspaces-remote",
-	"displayName": "VS Code Dev Spaces",
-	"description": "Support for connecting local a VS Code instance to a Dev Workspace under Red Hat OpenShift Dev Spaces",
+	"name": "devspaces-remote-ssh",
+	"displayName": "Dev Spaces Local/Remote Support - SSH",
+	"description": "Support for connecting a local VS Code instance to a Dev Workspace under Red Hat OpenShift Dev Spaces over SSH",
 	"version": "0.0.1",
 	"publisher": "redhat",
 	"repository": "https://github.com/redhat-developer/vscode-devspaces",
@@ -10,6 +10,13 @@
 	},
 	"categories": [
 		"Other"
+	],
+	"keywords": [
+		"Kubernetes",
+		"Openshift",
+		"remote development",
+		"remote",
+		"ssh"
 	],
 	"activationEvents": [
 		"onView:remoteTargets"

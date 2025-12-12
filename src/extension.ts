@@ -1,14 +1,18 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
 import { DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, PodInfo } from './utils/cluster';
-import { readFile } from './utils/io';
+import { readFile, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
-import { existsSync, writeFileSync } from 'fs';
+import { writeFileSync } from 'fs';
 import SSHConfig, { Line, LineType } from 'ssh-config';
 
-export const remoteSSHExtension = getSSHExtension();
+export let extStoragePath: vscode.Uri;
+
 export async function activate(context: vscode.ExtensionContext) {
+
+	extStoragePath = context.globalStorageUri;
+	const remoteSSHExtension = getSSHExtension();
 	if (remoteSSHExtension === undefined) {
 		// handle
 	}
@@ -70,8 +74,7 @@ async function updateRemoteSSHTargets() {
 	for (const pod of sshdPods) {
 		if (pod.name !== undefined && pod.id !== undefined) {
 			const privateKey = await getPrivateKey(pod.name);
-			const privateKeyFile = path.join(homedir(), '.ssh', `${pod.name}.key`);
-			writeFileSync(privateKeyFile, privateKey, { mode: 0o600 });
+			const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
 			const user = await getUser(pod.name);
 			const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, 2022, user, privateKeyFile);
@@ -79,14 +82,11 @@ async function updateRemoteSSHTargets() {
 		}
 	}
 
+	// TODO: Expand for windows
 	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
 	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
 
 	writeFileSync(devspacesConfigFile, devspaceHostEntries, { mode: 0o600 });
-
-	if (!existsSync(sshConfigFile)) {
-		//
-	}
 
 	const sshData = readFile(sshConfigFile);
 	const sshConfig = SSHConfig.parse(sshData);
@@ -110,3 +110,6 @@ async function updateRemoteSSHTargets() {
 	vscode.commands.executeCommand('remote-explorer.refresh');
 }
 
+export function deactivate() {
+	console.log(path.join(extStoragePath.fsPath, '.ssh'));
+}
