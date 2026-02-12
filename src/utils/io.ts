@@ -1,4 +1,4 @@
-import { existsSync, lstatSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "fs";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "fs";
 import path from "path";
 import { extStoragePath } from "../extension";
 
@@ -14,7 +14,9 @@ export function readFile(filePath: string) : string {
 }
 
 export function writeKeyFile(fileName: string, data: string): string {
-    const privateKeyPath = path.join(extStoragePath.fsPath, '.ssh', fileName);
+    const privateKeyDir = path.join(extStoragePath.fsPath, '.ssh');
+    ensureExists(privateKeyDir);
+    const privateKeyPath = path.join(privateKeyDir, fileName);
     writeFileSync(privateKeyPath, data, { mode: 0o600 });
     return privateKeyPath;
 }
@@ -31,4 +33,12 @@ export function deleteDirectory(dir: string) {
         });
         rmdirSync(dir);
     }
+}
+
+export function ensureExists(dir: string) {
+    if (existsSync(dir)) {
+        return;
+    }
+    ensureExists(path.dirname(dir));
+    mkdirSync(dir);
 }

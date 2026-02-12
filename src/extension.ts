@@ -39,6 +39,8 @@ export async function activate(context: vscode.ExtensionContext) {
 			const loginCmd: CliCommand = new CliCommand();
 			await loginCmd.spawn(`oc login --server=${apiURL} --web`);
 
+			await updateRemoteSSHTargets();
+
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces();
 			const match : DevWorkspaceInfo | undefined = devspaces.find(d => d.url === inputURL);
 			if (match) {
@@ -74,11 +76,13 @@ async function updateRemoteSSHTargets() {
 	for (const pod of sshdPods) {
 		if (pod.name !== undefined && pod.id !== undefined) {
 			const privateKey = await getPrivateKey(pod.name);
-			const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
+			if (privateKey) {
+				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
-			const user = await getUser(pod.name);
-			const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, 2022, user, privateKeyFile);
-			devspaceHostEntries += devspaceHostEntry;
+				const user = await getUser(pod.name);
+				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, 2022, user, privateKeyFile);
+				devspaceHostEntries += devspaceHostEntry;
+			}
 		}
 	}
 
