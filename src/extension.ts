@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, PodInfo } from './utils/cluster';
+import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, PodInfo, PortForwardInfo } from './utils/cluster';
 import { readFile, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -40,6 +40,7 @@ export async function activate(context: vscode.ExtensionContext) {
 			await loginCmd.spawn(`oc login --server=${apiURL} --web`);
 
 			await updateRemoteSSHTargets();
+			await sleep(10000);
 
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces();
 			const match : DevWorkspaceInfo | undefined = devspaces.find(d => d.url === inputURL);
@@ -72,25 +73,38 @@ async function updateRemoteSSHTargets() {
 	const sshdPods: PodInfo[] = (await getPods()).filter(async (p) => {
 		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
 	});
-	let devspaceHostEntries = '';
+
+	if (sshdPods.length === 0) {
+		return;
+	}
+
+	const portForwardEntries: PortForwardInfo[] = [];
+	let devspaceHostEntriesData = '';
 	for (const pod of sshdPods) {
 		if (pod.name !== undefined && pod.id !== undefined) {
 			const privateKey = await getPrivateKey(pod.name);
 			if (privateKey) {
 				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
+				const localPort = Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
 				const user = await getUser(pod.name);
-				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, 2022, user, privateKeyFile);
-				devspaceHostEntries += devspaceHostEntry;
+				const namespace = await getNameSpace(pod.name);
+				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
+				portForwardEntries.push({namespace: namespace, name: pod.name, port: localPort});
+				devspaceHostEntriesData += devspaceHostEntry;
 			}
 		}
+	}
+
+	if (devspaceHostEntriesData.length === 0) {
+		return;
 	}
 
 	// TODO: Expand for windows
 	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
 	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
 
-	writeFileSync(devspacesConfigFile, devspaceHostEntries, { mode: 0o600 });
+	writeFileSync(devspacesConfigFile, devspaceHostEntriesData, { mode: 0o600 });
 
 	const sshData = readFile(sshConfigFile);
 	const sshConfig = SSHConfig.parse(sshData);
@@ -111,9 +125,19 @@ async function updateRemoteSSHTargets() {
 	const newSSHData = SSHConfig.stringify(sshConfig);
 	writeFileSync(sshConfigFile, newSSHData, { mode: 0o600 });
 
+	for (const pf of portForwardEntries) {
+		if (pf.namespace && pf.name && pf.port) {
+			await createPortForward(pf.namespace, pf.name, pf.port);
+		}
+	}
+
 	vscode.commands.executeCommand('remote-explorer.refresh');
 }
 
 export function deactivate() {
 	console.log(path.join(extStoragePath.fsPath, '.ssh'));
 }
+
+const sleep = (ms: number): Promise<void> => {
+  return new Promise(resolve => setTimeout(resolve, ms));
+};

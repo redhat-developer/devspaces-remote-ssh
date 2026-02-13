@@ -14,9 +14,15 @@ export class PodInfo  {
     status: string | undefined; // status.phase
 }
 
+export class PortForwardInfo {
+    namespace: string | undefined;
+    name: string | undefined;
+    port: number | undefined;
+}
+
 export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
     const getWorkspacesCmd : CliCommand = new CliCommand();
-    await getWorkspacesCmd.spawn(`oc get devworkspace -o 'jsonpath={range .items[*]}{",{"}"id":"{.status.devworkspaceId}","url":"{.status.mainUrl}","status":"{.status.phase}"{"}"}{end}'`);
+    await getWorkspacesCmd.spawn(`oc get devworkspace -o 'jsonpath={range .items[*]}{",{"}"id":"{.metadata.name}","url":"{.status.mainUrl}","status":"{.status.phase}"{"}"}{end}'`);
     const output = getWorkspacesCmd.getOutput();
     const jsonString = `[ ${output.substring(1)} ]`;
     return JSON.parse(jsonString);
@@ -61,17 +67,13 @@ export async function getDevWorkspaceMainPage(podName: string): Promise<string |
     return undefined;
 }
 
-export async function getPortForwardingCommand(podName: string): Promise<string> {
-    const namespaceCmd: CliCommand = new CliCommand();
-    let sshdPageContainer = undefined;
-    if (await isDevSpaces324(podName)) {
-        sshdPageContainer = 'che-code-sshd';
-    } else {
-        sshdPageContainer = 'che-code-sshd-page';
-    }
-    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c 'echo -n $DEVWORKSPACE_NAMESPACE'`);
-    const namespace = namespaceCmd.getOutput();
-    return `oc port-forward -n ${namespace} ${podName} 2022:2022`;
+export async function createPortForward(namespace: string, podName: string, port: number): Promise<CliCommand> {
+    const portForward: CliCommand = new CliCommand();
+    // oc port-forward process is a child of the main editor
+    // when using "connect in current window", child processes seem to be terminated
+    // Use unref to ensure port-forward continues to operate
+    portForward.spawn(`oc port-forward -n ${namespace} ${podName} ${port}:2022`, true, true);
+    return portForward;
 }
 
 export async function getPrivateKey(podName: string): Promise<string | undefined> {
@@ -104,6 +106,19 @@ export async function getUser(podName: string): Promise<string> {
     return whoami;
 }
 
+export async function getNameSpace(podName: string): Promise<string> {
+    const namespaceCmd: CliCommand = new CliCommand();
+    let sshdPageContainer = undefined;
+    if (await isDevSpaces324(podName)) {
+        sshdPageContainer = 'che-code-sshd';
+    } else {
+        sshdPageContainer = 'che-code-sshd-page';
+    }
+    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c 'echo -n $DEVWORKSPACE_NAMESPACE'`);
+    const namespace = namespaceCmd.getOutput();
+    return namespace;
+}
+
 export function getOpenShiftApiURL(inputURL: string) {
     try {
         const host = new URL(inputURL);
@@ -124,23 +139,11 @@ export function getOpenShiftApiURL(inputURL: string) {
 }
 
 export async function generateHostEntry(podName: string, devworkspaceId: string, port : number, userName: string, identityPath: string): Promise<string> {
-    const namespaceCmd: CliCommand = new CliCommand();
-    let sshdPageContainer = undefined;
-    if (await isDevSpaces324(podName)) {
-        sshdPageContainer = 'che-code-sshd';
-    } else {
-        sshdPageContainer = 'che-code-sshd-page';
-    }
-    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c 'echo -n $DEVWORKSPACE_NAMESPACE'`);
-    const namespace = namespaceCmd.getOutput();
     return`
 Host ${devworkspaceId}
   HostName 127.0.0.1
   Port ${port}
   User ${userName}
   IdentityFile ${identityPath}
-  UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}
-  ProxyCommand sh -c "oc port-forward -n ${namespace} ${podName} ${port}:${port} & sleep 1s; nc -w 5 127.0.0.1 ${port}"`;
-  // TODO: We can support multiple connections by specifying a different local port
-  // TODO: ProxyCommand may not be ideal for Windows
+  UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
 }
