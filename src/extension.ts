@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, PodInfo, PortForwardInfo } from './utils/cluster';
+import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo } from './utils/cluster';
 import { readFile, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -40,7 +40,6 @@ export async function activate(context: vscode.ExtensionContext) {
 			await loginCmd.spawn(`oc login --server=${apiURL} --web`);
 
 			await updateRemoteSSHTargets();
-			await sleep(10000);
 
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces();
 			const match : DevWorkspaceInfo | undefined = devspaces.find(d => d.url === inputURL);
@@ -130,6 +129,11 @@ async function updateRemoteSSHTargets() {
 			await createPortForward(pf.namespace, pf.name, pf.port);
 		}
 	}
+	for (const pf of portForwardEntries) {
+		if (pf.port !== undefined) {
+			await isPortAvailable(pf.port, 2000);
+		}
+	}
 
 	vscode.commands.executeCommand('remote-explorer.refresh');
 }
@@ -137,7 +141,3 @@ async function updateRemoteSSHTargets() {
 export function deactivate() {
 	console.log(path.join(extStoragePath.fsPath, '.ssh'));
 }
-
-const sleep = (ms: number): Promise<void> => {
-  return new Promise(resolve => setTimeout(resolve, ms));
-};

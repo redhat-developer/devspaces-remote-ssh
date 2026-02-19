@@ -1,3 +1,4 @@
+import { Socket } from "net";
 import { getDevSpacesOutputLog } from "../extension";
 import { CliCommand } from "./command";
 import { platform } from 'os';
@@ -15,9 +16,9 @@ export class PodInfo  {
 }
 
 export class PortForwardInfo {
-    namespace: string | undefined;
-    name: string | undefined;
-    port: number | undefined;
+    namespace!: string;
+    name!: string;
+    port!: number;
 }
 
 export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
@@ -40,12 +41,7 @@ export async function isCodeSSHDWorkspace(podName: string): Promise<boolean> {
     const isCodeSSHDWorkspaceCmd: CliCommand = new CliCommand();
     await isCodeSSHDWorkspaceCmd.spawn(`oc set env pod/${podName} --list`);
     const stdout = isCodeSSHDWorkspaceCmd.getOutput();
-    if (await isDevSpaces324(podName)) {
-        return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd');
-    } else {
-        return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd-page');
-    }
-    // TODO: Check the main url
+    return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd');
 }
 
 export async function isDevSpaces324(podName: string): Promise<boolean> {
@@ -98,10 +94,11 @@ export async function getUser(podName: string): Promise<string> {
     let mainContainer = undefined;
     if (await isDevSpaces324(podName)) {
         mainContainer = 'che-code-sshd';
+        await whoamiCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- whoami`);
     } else {
         mainContainer = await getDevWorkspaceMainPage(podName);
+        await whoamiCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- cat /sshd/username`);
     }
-    await whoamiCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- whoami`);
     const whoami = whoamiCmd.getOutput().trim();
     return whoami;
 }
@@ -146,4 +143,29 @@ Host ${devworkspaceId}
   User ${userName}
   IdentityFile ${identityPath}
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
+}
+
+export async function isPortAvailable(port: number, timeout: number): Promise<boolean> {
+    const start = Date.now();
+    while (Date.now() - start < timeout) {
+        try {
+            await new Promise((resolve, reject) => {
+                const socket = new Socket();
+                socket.on("connect", () => {
+                    socket.destroy();
+                    resolve(true);
+                });
+                socket.on("error", (err: Error) => {
+                    socket.destroy();
+                    reject(err);
+                });
+                socket.connect(port);
+            });
+            return true;
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        } catch (e) {
+            await new Promise(r => setTimeout(r, 100));
+        }
+    }
+    return false;
 }
