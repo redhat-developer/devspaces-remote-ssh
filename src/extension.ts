@@ -1,7 +1,7 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
 import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo } from './utils/cluster';
-import { readFile, writeKeyFile } from './utils/io';
+import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
 import { writeFileSync } from 'fs';
@@ -14,7 +14,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	extStoragePath = context.globalStorageUri;
 	const remoteSSHExtension = getSSHExtension();
 	if (remoteSSHExtension === undefined) {
-		// handle
+		// TODO: handle
 	}
 
 	const whoami: CliCommand = new CliCommand();
@@ -74,6 +74,7 @@ async function updateRemoteSSHTargets() {
 	});
 
 	if (sshdPods.length === 0) {
+		updatePortForwarding();
 		return;
 	}
 
@@ -96,6 +97,7 @@ async function updateRemoteSSHTargets() {
 	}
 
 	if (devspaceHostEntriesData.length === 0) {
+		updatePortForwarding();
 		return;
 	}
 
@@ -126,17 +128,50 @@ async function updateRemoteSSHTargets() {
 
 	for (const pf of portForwardEntries) {
 		if (pf.namespace && pf.name && pf.port) {
-			await createPortForward(pf.namespace, pf.name, pf.port);
+			const pfCmd: CliCommand = await createPortForward(pf.namespace, pf.name, pf.port);
+			pf.pid = pfCmd.getPID();
 		}
 	}
+
+	const availablePortForwardEntries: PortForwardInfo[] = [];
 	for (const pf of portForwardEntries) {
 		if (pf.port !== undefined) {
-			await isPortAvailable(pf.port, 2000);
+			const available = await isPortAvailable(pf.port, 2000);
+			if (available) {
+				availablePortForwardEntries.push(pf);
+			}
 		}
 	}
 
 	vscode.commands.executeCommand('remote-explorer.refresh');
+
+	// TODO: clean up private keys
+
+	updatePortForwarding(sshdPods, availablePortForwardEntries);
+
 }
+
+async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEntries?: PortForwardInfo[]) {
+	const result: PortForwardInfo[] = [];
+	if (availablePortForwardEntries) {
+		result.push(...availablePortForwardEntries);
+	}
+
+	for (const pf of getSavedPorts()) {
+		const entryExists = result.some(e => e.name === pf.name && e.namespace === pf.namespace && e.port === pf.port);
+		const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name) : false;
+		const portAvailable = await isPortAvailable(pf.port, 1000);
+		if (portAvailable && podRunning && !entryExists) {
+			result.push(pf);
+		} else {
+			// kill the oc port-forward process
+			getDevSpacesOutputLog().appendLine(`Killing ${pf.pid} ${pf.name} ${pf.namespace} ${pf.port}`);
+		}
+	}
+
+	rememberPorts(result);
+}
+
 
 export function deactivate() {
 	console.log(path.join(extStoragePath.fsPath, '.ssh'));

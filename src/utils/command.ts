@@ -68,6 +68,10 @@ export class CliCommand implements Disposable {
         return this.exiteCode;
     }
 
+    getPID(): number | undefined {
+        return this.proc?.pid;
+    }
+
     dispose() {
         this.proc?.kill();
     }

@@ -19,6 +19,7 @@ export class PortForwardInfo {
     namespace!: string;
     name!: string;
     port!: number;
+    pid?: number;
 }
 
 export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
@@ -169,3 +170,4 @@ export async function isPortAvailable(port: number, timeout: number): Promise<bo
     }
     return false;
 }
+
