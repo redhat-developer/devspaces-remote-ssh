@@ -27,7 +27,8 @@ export async function activate(context: vscode.ExtensionContext) {
 	const connectCmd = vscode.commands.registerCommand('devspaces.connect.cluster', async () => {
 		const inputURL = await vscode.window.showInputBox({
 			title: 'Cluster URL',
-			prompt: 'Please enter **ANY** URL from the OpenShift cluster'
+			prompt: 'Please enter the landing webpage URL of the "VS Code (desktop) (SSH)" editor to be connected',
+			placeHolder: 'https://devspaces.apps-crc.testing/developer/nodejs-web-app/3400/'
 		});
 
 		if (inputURL) {
