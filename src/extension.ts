@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo } from './utils/cluster';
+import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -8,6 +8,7 @@ import { writeFileSync } from 'fs';
 import SSHConfig, { Line, LineType } from 'ssh-config';
 
 export let extStoragePath: vscode.Uri;
+export let channel : vscode.OutputChannel;
 
 export async function activate(context: vscode.ExtensionContext) {
 
@@ -57,7 +58,10 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function getDevSpacesOutputLog() : vscode.OutputChannel {
-	return vscode.window.createOutputChannel('Red Hat OpenShift Dev Spaces');
+	if (channel === undefined) {
+		channel = vscode.window.createOutputChannel('Red Hat OpenShift Dev Spaces');
+	}
+	return channel;
 }
 
 export function getSSHExtension() : string | undefined {
@@ -74,7 +78,12 @@ async function updateRemoteSSHTargets() {
 		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
 	});
 
+	// TODO: Expand for windows
+	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
+	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
+
 	if (sshdPods.length === 0) {
+		writeFileSync(devspacesConfigFile, '', { mode: 0o600 });
 		updatePortForwarding();
 		return;
 	}
@@ -87,24 +96,22 @@ async function updateRemoteSSHTargets() {
 			if (privateKey) {
 				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
-				const localPort = Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
+				const currPF = await getExistingPortForwardEntry(pod.name);
+				const localPort = currPF ? currPF.port : Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
 				const user = await getUser(pod.name);
 				const namespace = await getNameSpace(pod.name);
 				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
-				portForwardEntries.push({namespace: namespace, name: pod.name, port: localPort});
+				portForwardEntries.push({namespace: namespace, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
 				devspaceHostEntriesData += devspaceHostEntry;
 			}
 		}
 	}
 
 	if (devspaceHostEntriesData.length === 0) {
+		writeFileSync(devspacesConfigFile, '', { mode: 0o600 });
 		updatePortForwarding();
 		return;
 	}
-
-	// TODO: Expand for windows
-	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
-	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
 
 	writeFileSync(devspacesConfigFile, devspaceHostEntriesData, { mode: 0o600 });
 
@@ -128,7 +135,7 @@ async function updateRemoteSSHTargets() {
 	writeFileSync(sshConfigFile, newSSHData, { mode: 0o600 });
 
 	for (const pf of portForwardEntries) {
-		if (pf.namespace && pf.name && pf.port) {
+		if (pf.namespace && pf.name && pf.port && !pf.pid) {
 			const pfCmd: CliCommand = await createPortForward(pf.namespace, pf.name, pf.port);
 			pf.pid = pfCmd.getPID();
 		}
@@ -137,7 +144,7 @@ async function updateRemoteSSHTargets() {
 	const availablePortForwardEntries: PortForwardInfo[] = [];
 	for (const pf of portForwardEntries) {
 		if (pf.port !== undefined) {
-			const available = await isPortAvailable(pf.port, 2000);
+			const available = await isPortAvailable(pf.port, 1000);
 			if (available) {
 				availablePortForwardEntries.push(pf);
 			}
@@ -164,9 +171,17 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 		const portAvailable = await isPortAvailable(pf.port, 1000);
 		if (portAvailable && podRunning && !entryExists) {
 			result.push(pf);
-		} else {
+		} else if (!(portAvailable && podRunning)) {
 			// kill the oc port-forward process
 			getDevSpacesOutputLog().appendLine(`Killing ${pf.pid} ${pf.name} ${pf.namespace} ${pf.port}`);
+			if (pf.pid) {
+				try {
+					// process.kill(pf.pid, "SIGTERM");
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				} catch (err) {
+					// continue
+				}
+			}
 		}
 	}
 

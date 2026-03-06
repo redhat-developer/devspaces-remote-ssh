@@ -2,6 +2,7 @@ import { Socket } from "net";
 import { getDevSpacesOutputLog } from "../extension";
 import { CliCommand } from "./command";
 import { platform } from 'os';
+import { getSavedPorts } from "./io";
 
 export class DevWorkspaceInfo {
     id: string | undefined; // status.devworkspaceId
@@ -144,6 +145,14 @@ Host ${devworkspaceId}
   User ${userName}
   IdentityFile ${identityPath}
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
+}
+
+export async function getExistingPortForwardEntry(podName: string): Promise<PortForwardInfo | undefined> {
+    const savedPorts: PortForwardInfo[] = getSavedPorts();
+    const match = savedPorts.find(pf => pf.name === podName);
+    if (match?.port && await isPortAvailable(match?.port, 1000)) {
+        return match;
+    }
 }
 
 export async function isPortAvailable(port: number, timeout: number): Promise<boolean> {

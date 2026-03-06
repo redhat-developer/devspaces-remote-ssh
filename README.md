@@ -2,7 +2,7 @@
 
 Support for connecting a local VS Code instance, over SSH, to a Red Hat OpenShift Dev Spaces developer workspace (DevWorkspace).
 
-This contributes remote host entries under the "SSH" cateogry of the "Remote Explorer" view.
+This contributes remote host entries under the "SSH" category of the "Remote Explorer" view.
 
 ## Prerequisites
 
