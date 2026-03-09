@@ -40,12 +40,12 @@
 				{
 					"command": "devspaces.connect.cluster",
 					"group": "navigation",
-					"when": "view == remoteTargets"
+					"when": "view == remoteTargets || view == sshHosts"
 				},
 				{
 					"command": "devspaces.connect.cluster",
 					"group": "inline",
-					"when": "view == remoteTargets"
+					"when": "view == remoteTargets || view == sshHosts"
 				}
 			]
 		},

@@ -4,7 +4,7 @@ import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspace
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
-import { writeFileSync } from 'fs';
+import { unlinkSync, writeFileSync } from 'fs';
 import SSHConfig, { Line, LineType } from 'ssh-config';
 
 export let extStoragePath: vscode.Uri;
@@ -14,8 +14,12 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	extStoragePath = context.globalStorageUri;
 	const remoteSSHExtension = getSSHExtension();
-	if (remoteSSHExtension === undefined) {
-		// TODO: handle
+	if (remoteSSHExtension !== undefined) {
+		vscode.window.showErrorMessage(`The "Dev Spaces Local/Remote Support - SSH"
+			extension requires the installation of either Remote - SSH (VS Code) OR
+			Open Remote - SSH (Code-based editors). Without one of these installed,
+			connecting to a cluster will not be possible.`);
+		return;
 	}
 
 	const whoami: CliCommand = new CliCommand();
@@ -68,7 +72,7 @@ export function getSSHExtension() : string | undefined {
 	if (vscode.extensions.getExtension('ms-vscode-remote.remote-ssh')) {
 		return 'microsoft';
 	} else if (vscode.extensions.getExtension('jeanp413.open-remote-ssh')) {
-		return 'openvsx';
+		return 'open';
 	} else {
 		return undefined;
 	}
@@ -151,9 +155,13 @@ async function updateRemoteSSHTargets() {
 		}
 	}
 
-	vscode.commands.executeCommand('remote-explorer.refresh');
-
-	// TODO: clean up private keys
+	if (getSSHExtension() === 'microsoft') {
+		vscode.commands.executeCommand('remote-explorer.refresh');
+	} else if (getSSHExtension() === 'open') {
+		vscode.commands.executeCommand('openremotessh.explorer.refresh');
+	} else {
+		// do nothing
+	}
 
 	updatePortForwarding(sshdPods, availablePortForwardEntries);
 
@@ -172,6 +180,7 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 		if (portAvailable && podRunning && !entryExists) {
 			result.push(pf);
 		} else if (!(portAvailable && podRunning)) {
+			unlinkSync(path.join(extStoragePath.fsPath, '.ssh', `${pf.name}.key`));
 			// kill the oc port-forward process
 			getDevSpacesOutputLog().appendLine(`Killing ${pf.pid} ${pf.name} ${pf.namespace} ${pf.port}`);
 			if (pf.pid) {
@@ -190,5 +199,4 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 
 
 export function deactivate() {
-	console.log(path.join(extStoragePath.fsPath, '.ssh'));
 }
