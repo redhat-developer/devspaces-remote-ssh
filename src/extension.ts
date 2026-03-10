@@ -14,7 +14,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	extStoragePath = context.globalStorageUri;
 	const remoteSSHExtension = getSSHExtension();
-	if (remoteSSHExtension !== undefined) {
+	if (remoteSSHExtension === undefined) {
 		vscode.window.showErrorMessage(`The "Dev Spaces Local/Remote Support - SSH"
 			extension requires the installation of either Remote - SSH (VS Code) OR
 			Open Remote - SSH (Code-based editors). Without one of these installed,
