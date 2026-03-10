@@ -6,7 +6,7 @@
 	"author": "Red Hat",
 	"publisher": "redhat",
 	"icon": "images/devspaces-icon.png",
-	"repository": "https://github.com/redhat-developer/vscode-devspaces",
+	"repository": "https://github.com/redhat-developer/devspaces-remote-ssh",
 	"engines": {
 		"vscode": "^1.100.0"
 	},

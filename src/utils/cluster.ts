@@ -79,10 +79,10 @@ export async function getPrivateKey(podName: string): Promise<string | undefined
     let mainContainer = undefined;
     if (await isDevSpaces324(podName)) {
         mainContainer = 'che-code-sshd';
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat $HOME/.ssh/ssh_client_ed25519_key'`);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat $HOME/.ssh/ssh_client_ed25519_key'`, false, false, true);
     } else {
         mainContainer = await getDevWorkspaceMainPage(podName);
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat /sshd/ssh_client_ed25519_key'`);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat /sshd/ssh_client_ed25519_key'`, false, false, true);
     }
     if (mainContainer) {
         const privateKey = privateKeyCmd.getOutput();
