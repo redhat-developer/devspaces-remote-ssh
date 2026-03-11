@@ -82,7 +82,7 @@ async function updateRemoteSSHTargets() {
 		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
 	});
 
-	// TODO: Expand for windows
+	// TODO: Create ssh config & kubeconfig if not present
 	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
 	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
 

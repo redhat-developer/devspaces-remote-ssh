@@ -24,19 +24,33 @@ export class PortForwardInfo {
 }
 
 export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
+    const dwInfo: DevWorkspaceInfo[] = [];
     const getWorkspacesCmd : CliCommand = new CliCommand();
-    await getWorkspacesCmd.spawn(`oc get devworkspace -o 'jsonpath={range .items[*]}{",{"}"id":"{.metadata.name}","url":"{.status.mainUrl}","status":"{.status.phase}"{"}"}{end}'`);
+    await getWorkspacesCmd.spawn(`oc get devworkspace -o "jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}"`);
     const output = getWorkspacesCmd.getOutput();
-    const jsonString = `[ ${output.substring(1)} ]`;
-    return JSON.parse(jsonString);
+    const devworkspacesEntries = output.substring(1).split(';');
+    for (const dw of devworkspacesEntries) {
+        const id = dw.split(',')[0];
+        const url = dw.split(',')[1];
+        const status = dw.split(',')[2];
+        dwInfo.push({ id: id, url: url, status: status});
+    }
+    return dwInfo;
 }
 
 export async function getPods(): Promise<PodInfo[]> {
+    const podInfo: PodInfo[] = [];
     const getPodsCmd : CliCommand = new CliCommand();
-    await getPodsCmd.spawn(`oc get pods -o 'jsonpath={range .items[*]}{",{"}"name":"{.metadata.name}","id":"{.metadata.labels.controller\\.devfile\\.io/devworkspace_name}","status":"{.status.phase}"{"}"}{end}'`);
+    await getPodsCmd.spawn(`oc get pods -o "jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}"`);
     const output = getPodsCmd.getOutput();
-    const jsonString = `[ ${output.substring(1)} ]`;
-    return JSON.parse(jsonString);
+    const podEntries = output.substring(1).split(';');
+    for (const pod of podEntries) {
+        const name = pod.split(',')[0];
+        const id = pod.split(',')[1];
+        const status = pod.split(',')[2];
+        podInfo.push({id: id, name: name, status: status});
+    }
+    return podInfo;
 }
 
 export async function isCodeSSHDWorkspace(podName: string): Promise<boolean> {
@@ -48,7 +62,7 @@ export async function isCodeSSHDWorkspace(podName: string): Promise<boolean> {
 
 export async function isDevSpaces324(podName: string): Promise<boolean> {
     const devspacesVersion: CliCommand = new CliCommand();
-    await devspacesVersion.spawn(`oc exec pods/${podName} -c che-code-sshd -- /bin/bash -c 'ls -1 /sshd'`);
+    await devspacesVersion.spawn(`oc exec pods/${podName} -c che-code-sshd -- /bin/bash -c "ls -1 /sshd"`);
     const exitCode = devspacesVersion.getExiteCode();
     return exitCode == 0;
 }
@@ -58,7 +72,7 @@ export async function getDevWorkspaceMainPage(podName: string): Promise<string |
     const match : PodInfo | undefined = pods.find(p => p.name === podName);
     if (match) {
         const mainContainerCmd: CliCommand = new CliCommand();
-        await mainContainerCmd.spawn(`oc get devworkspace ${match.id} -o 'jsonpath={.spec.template.components[0].name}'`);
+        await mainContainerCmd.spawn(`oc get devworkspace ${match.id} -o "jsonpath={.spec.template.components[0].name}"`);
         const mainContainer = mainContainerCmd.getOutput();
         return mainContainer;
     }
@@ -79,10 +93,10 @@ export async function getPrivateKey(podName: string): Promise<string | undefined
     let mainContainer = undefined;
     if (await isDevSpaces324(podName)) {
         mainContainer = 'che-code-sshd';
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat $HOME/.ssh/ssh_client_ed25519_key'`, false, false, true);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c "cat $HOME/.ssh/ssh_client_ed25519_key"`, false, false, true);
     } else {
         mainContainer = await getDevWorkspaceMainPage(podName);
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c 'cat /sshd/ssh_client_ed25519_key'`, false, false, true);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c "cat /sshd/ssh_client_ed25519_key"`, false, false, true);
     }
     if (mainContainer) {
         const privateKey = privateKeyCmd.getOutput();
@@ -113,7 +127,7 @@ export async function getNameSpace(podName: string): Promise<string> {
     } else {
         sshdPageContainer = 'che-code-sshd-page';
     }
-    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c 'echo -n $DEVWORKSPACE_NAMESPACE'`);
+    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c "echo -n $DEVWORKSPACE_NAMESPACE"`);
     const namespace = namespaceCmd.getOutput();
     return namespace;
 }
