@@ -4,6 +4,11 @@ import { CliCommand } from "./command";
 import { platform } from 'os';
 import { getSavedPorts } from "./io";
 
+const isWindows = process.platform.indexOf('win') === 0;
+// Need to preserve variables from being evaluated in the local shell
+// Single quotes preserve on Linux, Double quotes preserve on Windows
+const QUOTE = isWindows ? '"' : '\'';
+
 export class DevWorkspaceInfo {
     id: string | undefined; // status.devworkspaceId
     url: string | undefined; // status.mainUrl
@@ -26,7 +31,7 @@ export class PortForwardInfo {
 export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
     const dwInfo: DevWorkspaceInfo[] = [];
     const getWorkspacesCmd : CliCommand = new CliCommand();
-    await getWorkspacesCmd.spawn(`oc get devworkspace -o "jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}"`);
+    await getWorkspacesCmd.spawn(`oc get devworkspace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}${QUOTE}`);
     const output = getWorkspacesCmd.getOutput();
     const devworkspacesEntries = output.substring(1).split(';');
     for (const dw of devworkspacesEntries) {
@@ -41,7 +46,7 @@ export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
 export async function getPods(): Promise<PodInfo[]> {
     const podInfo: PodInfo[] = [];
     const getPodsCmd : CliCommand = new CliCommand();
-    await getPodsCmd.spawn(`oc get pods -o "jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}"`);
+    await getPodsCmd.spawn(`oc get pods -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}${QUOTE}`);
     const output = getPodsCmd.getOutput();
     const podEntries = output.substring(1).split(';');
     for (const pod of podEntries) {
@@ -93,10 +98,10 @@ export async function getPrivateKey(podName: string): Promise<string | undefined
     let mainContainer = undefined;
     if (await isDevSpaces324(podName)) {
         mainContainer = 'che-code-sshd';
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c "cat $HOME/.ssh/ssh_client_ed25519_key"`, false, false, true);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     } else {
         mainContainer = await getDevWorkspaceMainPage(podName);
-        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c "cat /sshd/ssh_client_ed25519_key"`, false, false, true);
+        await privateKeyCmd.spawn(`oc exec pods/${podName} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /sshd/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     }
     if (mainContainer) {
         const privateKey = privateKeyCmd.getOutput();
@@ -127,7 +132,7 @@ export async function getNameSpace(podName: string): Promise<string> {
     } else {
         sshdPageContainer = 'che-code-sshd-page';
     }
-    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c "echo -n $DEVWORKSPACE_NAMESPACE"`);
+    await namespaceCmd.spawn(`oc exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c ${QUOTE}echo -n $DEVWORKSPACE_NAMESPACE${QUOTE}`);
     const namespace = namespaceCmd.getOutput();
     return namespace;
 }

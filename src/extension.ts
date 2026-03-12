@@ -179,8 +179,13 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 		const portAvailable = await isPortAvailable(pf.port, 1000);
 		if (portAvailable && podRunning && !entryExists) {
 			result.push(pf);
-		} else if (!(portAvailable && podRunning)) {
-			unlinkSync(path.join(extStoragePath.fsPath, '.ssh', `${pf.name}.key`));
+		} else if (!podRunning) {
+			try {
+				unlinkSync(path.join(extStoragePath.fsPath, '.ssh', `${pf.name}.key`));
+			// eslint-disable-next-line @typescript-eslint/no-unused-vars
+			} catch (err) {
+				// continue
+			}
 			// kill the oc port-forward process
 			getDevSpacesOutputLog().appendLine(`Killing ${pf.pid} ${pf.name} ${pf.namespace} ${pf.port}`);
 			if (pf.pid) {

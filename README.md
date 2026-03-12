@@ -6,7 +6,7 @@ This contributes remote host entries under the "SSH" category of the "Remote Exp
 
 ## Prerequisites
 
-- [`oc`](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/) commandline tool
+- [`oc`](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/) commandline tool (installed and on the user or system path)
 - One of :
   - `Remote - SSH` (`ms-vscode-remote.remote-ssh`) provided by Microsoft for VS Code
   - `Open Remote - SSH` (`jeanp413.open-remote-ssh`) for a Code based editor
