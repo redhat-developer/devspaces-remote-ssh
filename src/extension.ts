@@ -177,6 +177,7 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 		const entryExists = result.some(e => e.name === pf.name && e.namespace === pf.namespace && e.port === pf.port);
 		const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name) : false;
 		const portAvailable = await isPortAvailable(pf.port, 1000);
+		getDevSpacesOutputLog().appendLine(`pid: ${pf.pid} name: ${pf.name} ${podRunning ? '(running)' : '(stopped)'} ns: ${pf.namespace} port: ${pf.port} ${portAvailable ? '(available)' : '(stopped)'}`);
 		if (portAvailable && podRunning && !entryExists) {
 			result.push(pf);
 		} else if (!podRunning) {
@@ -186,8 +187,6 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 			} catch (err) {
 				// continue
 			}
-			// kill the oc port-forward process
-			getDevSpacesOutputLog().appendLine(`Killing ${pf.pid} ${pf.name} ${pf.namespace} ${pf.port}`);
 			if (pf.pid) {
 				try {
 					// process.kill(pf.pid, "SIGTERM");

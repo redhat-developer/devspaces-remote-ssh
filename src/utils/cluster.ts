@@ -33,12 +33,14 @@ export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
     const getWorkspacesCmd : CliCommand = new CliCommand();
     await getWorkspacesCmd.spawn(`oc get devworkspace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}${QUOTE}`);
     const output = getWorkspacesCmd.getOutput();
-    const devworkspacesEntries = output.substring(1).split(';');
-    for (const dw of devworkspacesEntries) {
-        const id = dw.split(',')[0];
-        const url = dw.split(',')[1];
-        const status = dw.split(',')[2];
-        dwInfo.push({ id: id, url: url, status: status});
+    if (output) {
+        const devworkspacesEntries = output.substring(1).split(';');
+        for (const dw of devworkspacesEntries) {
+            const id = dw.split(',')[0];
+            const url = dw.split(',')[1];
+            const status = dw.split(',')[2];
+            dwInfo.push({ id: id, url: url, status: status});
+        }
     }
     return dwInfo;
 }
@@ -48,12 +50,14 @@ export async function getPods(): Promise<PodInfo[]> {
     const getPodsCmd : CliCommand = new CliCommand();
     await getPodsCmd.spawn(`oc get pods -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}${QUOTE}`);
     const output = getPodsCmd.getOutput();
-    const podEntries = output.substring(1).split(';');
-    for (const pod of podEntries) {
-        const name = pod.split(',')[0];
-        const id = pod.split(',')[1];
-        const status = pod.split(',')[2];
-        podInfo.push({id: id, name: name, status: status});
+    if (output) {
+        const podEntries = output.substring(1).split(';');
+        for (const pod of podEntries) {
+            const name = pod.split(',')[0];
+            const id = pod.split(',')[1];
+            const status = pod.split(',')[2];
+            podInfo.push({id: id, name: name, status: status});
+        }
     }
     return podInfo;
 }

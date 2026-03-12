@@ -56,7 +56,12 @@ export class CliCommand implements Disposable {
                     if (suppressOutput) {
                         CliCommand.channel.append('[Output Suppressed]');
                     } else {
-                        CliCommand.channel.append(this.stdout);
+                        if (this.stdout) {
+                            CliCommand.channel.append(this.stdout);
+                        }
+                        if (this.stderr) {
+                            CliCommand.channel.append(this.stderr);
+                        }
                     }
                 }
                 resolve(undefined);
