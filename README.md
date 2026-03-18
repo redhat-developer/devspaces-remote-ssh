@@ -13,9 +13,9 @@ This contributes remote host entries under the "SSH" category of the "Remote Exp
 
 ## Usage
 
-This extension uses the existing Remote support provided by either `Remote - SSH` or `Open Remote - SSH` to contribute Red Hat OpenShift Dev Spaces developer workspaces as SSH hosts, and automates eastablishing the connection.
+This extension uses the existing Remote support provided by either `Remote - SSH` or `Open Remote - SSH` to contribute Red Hat OpenShift Dev Spaces developer workspaces as SSH hosts, and **automates eastablishing the connection**.
 
-When selecting `Visual Studio Code (desktop) (SSH)` editor, this establishes an SSHD service in the user's development container (as defined by their devfile). This editor also opens a landing webpage that contains instructions on how to connect to the workspace from a local VS Code-based editor. These instructions are not trivial, so this workflow simplifies the process by setting up the connection automatically.
+When `Visual Studio Code (desktop) (SSH)` is selected as an editor, it establishes an SSHD service in the user's development container (as defined by their devfile). This editor also opens a landing webpage that contains instructions on how to connect to the workspace from a local VS Code-based editor. **These landing page instructions are not trivial, so this workflow simplifies the process by setting up the connection automatically.**
 
 The extension provides two main workflows for connecting to a remote developer workspace :
 
@@ -24,6 +24,9 @@ The extension provides two main workflows for connecting to a remote developer w
 With this workflow, simply providing the URL of the landing webpage of the developer workspace. The URL will often be of the form : `https://${CLUSTER_URL}/${USER}/${DEVWORKSPACE_NAME}/3400/`
 
 ![](images/vscode-desktop-ssh-landing-page.png)
+
+> [!NOTE]
+> The instructions on the landing page need not be performed. They are automated by this extension.
 
 From the "Remote Explorer" view, select one of the "Connect to Dev Spaces" icons within the view and provide the landing page URL of the developer workspace (DevWorkspace).
 
