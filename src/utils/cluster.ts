@@ -1,3 +1,4 @@
+import * as vscode from 'vscode';
 import { Socket } from "net";
 import { getDevSpacesOutputLog } from "../extension";
 import { CliCommand } from "./command";
@@ -203,3 +204,19 @@ export async function isPortAvailable(port: number, timeout: number): Promise<bo
     return false;
 }
 
+export async function updateDefaultProject() {
+    const projListCmd: CliCommand = new CliCommand();
+    await projListCmd.spawn(`oc projects -q`);
+    const code = projListCmd.getExiteCode();
+    if (code === 0) {
+        const projList: string[] = projListCmd.getOutput().split('\n').map(p => p.trim()).filter(p => p !== '');
+        if (projList.length > 0) {
+            const inputProject = await vscode.window.showQuickPick(projList, { title: 'No project configured. Select a default project' });
+            getDevSpacesOutputLog().appendLine(`Setting project to : ${inputProject}`);
+            const setProjCmd: CliCommand = new CliCommand();
+            await setProjCmd.spawn(`oc project ${inputProject}`);
+        } else {
+            getDevSpacesOutputLog().appendLine(`No projects were detected for the current user.`);
+        }
+    }
+}

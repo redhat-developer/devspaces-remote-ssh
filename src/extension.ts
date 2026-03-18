@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo } from './utils/cluster';
+import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -26,6 +26,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	await whoami.spawn('oc whoami');
 	const isLoggedIn = whoami.getExiteCode();
 	if (isLoggedIn === 0) {
+		await validateCurrentProject();
 		updateRemoteSSHTargets();
 	}
 
@@ -58,7 +59,12 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	const updateDefaultProjectCmd = vscode.commands.registerCommand('devspaces.update.project', async () => {
+		updateDefaultProject();
+	});
+
 	context.subscriptions.push(connectCmd);
+	context.subscriptions.push(updateDefaultProjectCmd);
 }
 
 export function getDevSpacesOutputLog() : vscode.OutputChannel {
@@ -77,6 +83,16 @@ export function getSSHExtension() : string | undefined {
 		return undefined;
 	}
 }
+
+async function validateCurrentProject() {
+	const currProjectCmd: CliCommand = new CliCommand();
+	await currProjectCmd.spawn(`oc project -q`);
+	const code = currProjectCmd.getExiteCode();
+	if (code != 0) {
+		await updateDefaultProject();
+	}
+}
+
 async function updateRemoteSSHTargets() {
 	const sshdPods: PodInfo[] = (await getPods()).filter(async (p) => {
 		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
@@ -201,6 +217,6 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 	rememberPorts(result);
 }
 
-
 export function deactivate() {
 }
+

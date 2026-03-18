@@ -55,14 +55,16 @@
 			{
 				"command": "devspaces.connect.cluster",
 				"title": "Connect to Dev Spaces",
+				"category": "Dev Spaces",
 				"icon": {
 					"light": "images/devspaces-icon.png",
 					"dark": "images/devspaces-icon.png"
 				}
 			},
 			{
-				"command": "devspaces.get.devworkspaces",
-				"title": "Get Dev Workspaces"
+				"command": "devspaces.update.project",
+				"title": "Update Default Project",
+				"category": "Dev Spaces"
 			}
 		]
 	},
