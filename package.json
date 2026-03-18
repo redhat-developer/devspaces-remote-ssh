@@ -8,7 +8,7 @@
 	"icon": "images/devspaces-icon.png",
 	"repository": "https://github.com/redhat-developer/devspaces-remote-ssh",
 	"engines": {
-		"vscode": "^1.100.0"
+		"vscode": "^1.79.0"
 	},
 	"categories": [
 		"Other"
