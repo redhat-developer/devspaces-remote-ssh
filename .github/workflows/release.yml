@@ -81,13 +81,19 @@ jobs:
       - name: Package devspaces-remote-ssh
         run: |
           pushd devspaces-remote-ssh
-          vsce package ${{ env.publishPreReleaseFlag }} -o ../devspaces-remote-ssh-${{ env.EXT_VERSION }}-${GITHUB_RUN_NUMBER}.vsix
+          for target in win32-x64 win32-arm64 linux-x64 linux-arm64 darwin-x64 darwin-arm64; do
+            npm run package-oc ${target}
+            vsce package ${{ env.publishPreReleaseFlag }} --target ${target} -o ../devspaces-remote-ssh-${target}-${{ env.EXT_VERSION }}-${GITHUB_RUN_NUMBER}.vsix
+            rm -rf out/oc/
+          done
+          vsce package ${{ env.publishPreReleaseFlag }} -o ../devspaces-remote-ssh-universal-${{ env.EXT_VERSION }}-${GITHUB_RUN_NUMBER}.vsix
+
       - name: Upload VSIX Artifacts
         uses: actions/upload-artifact@v5
         with:
           name: devspaces-remote-ssh
           path: |
-            devspaces-remote-ssh-${{ env.EXT_VERSION }}-${{github.run_number}}.vsix
+            devspaces-remote-ssh-*-${{ env.EXT_VERSION }}-${{github.run_number}}.vsix
           if-no-files-found: error
       - name: Publish to GH Release Tab
         if: ${{ inputs.publishToMarketPlace == 'true' && inputs.publishToOVSX == 'true' }}
@@ -98,7 +104,7 @@ jobs:
           title: "${{ env.EXT_VERSION }}"
           draft: true
           files: |
-              devspaces-remote-ssh-${{ env.EXT_VERSION }}-${{ github.run_number }}.vsix
+              devspaces-remote-ssh-*-${{ env.EXT_VERSION }}-${{ github.run_number }}.vsix
   release-job:
     environment: ${{ (inputs.publishToMarketPlace == 'true' || inputs.publishToOVSX == 'true') && 'release' || 'pre-release' }}
     runs-on: ubuntu-latest
@@ -116,11 +122,20 @@ jobs:
       - name: Publish to VS Code Marketplace
         if: ${{ github.event_name == 'schedule' || inputs.publishToMarketPlace == 'true' || inputs.publishPreRelease == 'true' }}
         run: |
-          vsce publish -p ${{ secrets.VSCODE_MARKETPLACE_TOKEN }} --packagePath devspaces-remote-ssh-*-${GITHUB_RUN_NUMBER}.vsix
+          for platformVsix in devspaces-remote-ssh-*-${GITHUB_RUN_NUMBER}.vsix; do
+            vsce publish -p ${{ secrets.VSCODE_MARKETPLACE_TOKEN }} --packagePath ${platformVsix}
+          done
       - name: Publish to OpenVSX Registry
         if: ${{ github.event_name == 'schedule' || inputs.publishToOVSX == 'true' || inputs.publishPreRelease == 'true' }}
         run: |
-          ovsx publish -p ${{ secrets.OVSX_MARKETPLACE_TOKEN }}  --packagePath devspaces-remote-ssh-*-${GITHUB_RUN_NUMBER}.vsix
+          for platformVsix in devspaces-remote-ssh-*-${GITHUB_RUN_NUMBER}.vsix; do
+            ovsx publish -p ${{ secrets.OVSX_MARKETPLACE_TOKEN }}  --packagePath ${platformVsix}
+          done
+      - name: Delete saved artifact
+        if: always()
+        uses: geekyeggo/delete-artifact@e46cfb9575865f907c2beb2e4170b5f4c7d77c52
+        with:
+          name: devspaces-remote-ssh
   post-release-job:
     if: ${{ inputs.publishToMarketPlace == 'true' && inputs.publishToOVSX == 'true' }}
     runs-on: ubuntu-latest

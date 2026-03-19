@@ -1,16 +1,27 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, isCodeSSHDWorkspace, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, hasDefaultProject, isCodeSSHDWorkspace, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
 import { unlinkSync, writeFileSync } from 'fs';
 import SSHConfig, { Line, LineType } from 'ssh-config';
+import { getOcBinaryFilename, getOcCommand } from './utils/oc-binary';
 
 export let extStoragePath: vscode.Uri;
-export let channel : vscode.OutputChannel;
+export let channel: vscode.OutputChannel;
+export let ocCmd: string | null;
 
 export async function activate(context: vscode.ExtensionContext) {
+
+	ocCmd = getOcCommand(context.extensionPath);
+	if (!ocCmd) {
+		vscode.window.showWarningMessage(`
+			The embedded 'oc' binary could not be located. If you are using the
+			universal version of the extension (which does not container 'oc'),
+			it is necessary to have oc installed onto the system.`);
+		ocCmd = getOcBinaryFilename();
+	}
 
 	extStoragePath = context.globalStorageUri;
 	const remoteSSHExtension = getSSHExtension();
@@ -22,10 +33,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	const whoami: CliCommand = new CliCommand();
-	await whoami.spawn('oc whoami');
-	const isLoggedIn = whoami.getExiteCode();
-	if (isLoggedIn === 0) {
+	if (await isLoggedIn()) {
 		await validateCurrentProject();
 		updateRemoteSSHTargets();
 	}
@@ -42,9 +50,10 @@ export async function activate(context: vscode.ExtensionContext) {
 			if (apiURL === undefined) {
 				vscode.window.showErrorMessage(
 					`The URL does not appear to be valid, and a connection could not be established.`);
+				return;
 			}
-			const loginCmd: CliCommand = new CliCommand();
-			await loginCmd.spawn(`oc login --server=${apiURL} --web`);
+
+			callOcLogin(apiURL);
 
 			await updateRemoteSSHTargets();
 
@@ -85,10 +94,7 @@ export function getSSHExtension() : string | undefined {
 }
 
 async function validateCurrentProject() {
-	const currProjectCmd: CliCommand = new CliCommand();
-	await currProjectCmd.spawn(`oc project -q`);
-	const code = currProjectCmd.getExiteCode();
-	if (code != 0) {
+	if (! await hasDefaultProject()) {
 		await updateDefaultProject();
 	}
 }
@@ -98,7 +104,7 @@ async function updateRemoteSSHTargets() {
 		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
 	});
 
-	// TODO: Create ssh config & kubeconfig if not present
+	// TODO: Create ssh config if not present
 	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
 	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
 
