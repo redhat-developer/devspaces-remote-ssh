@@ -73,7 +73,8 @@
 		"compile": "tsc -p ./",
 		"lint": "eslint",
 		"watch": "tsc -watch -p ./",
-		"prepare-pre-release": "node scripts/index.mjs prepare-pre-release"
+		"prepare-pre-release": "node scripts/index.mjs prepare-pre-release",
+		"package-oc": "node scripts/index.mjs package-oc"
 	},
 	"dependencies": {
 		"ssh-config": "^5.0.4"
@@ -84,8 +85,10 @@
 		"@types/fs-extra": "^11.0.0",
 		"@types/node": "^22",
 		"@types/vscode": "^1.79.0",
+		"adm-zip": "^0.5.16",
 		"eslint": "^9.39.2",
 		"fs-extra": "^11.3.0",
+		"tar": "^7.4.3",
 		"typescript": "^5.9.3",
 		"typescript-eslint": "^8.56.0"
 	}
