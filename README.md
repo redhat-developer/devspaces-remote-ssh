@@ -11,7 +11,7 @@ This contributes remote host entries under the "SSH" category of the "Remote Exp
   - `Open Remote - SSH` (`jeanp413.open-remote-ssh`) for a Code based editor
 
 >[!NOTE]
-> The [`oc`](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/) commandline tool is **not a prerequisite** on most supported platforms (eg. `win32-x64`, `win32-arm64`, `darwin-x64`, `darwin-arm64`, `linux-x64`, `linux-arm64`). If running on an unsupported platform, the "universal" version of the extension wil be installed, which will require the installation of `oc`.
+> [`oc`](https://mirror.openshift.com/pub/openshift-v4/clients/ocp/latest/), is packaged into this extension, on most supported platforms (eg. `win32-x64`, `win32-arm64`, `darwin-x64`, `darwin-arm64`, `linux-x64`, `linux-arm64`). If running on an unsupported platform, the "universal" version of the extension will be installed, which will require users to manually install/setup `oc`.
 
 ## Usage
 
