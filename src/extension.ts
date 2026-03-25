@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getNameSpace, getOpenShiftApiURL, getPods, getPrivateKey, getUser, hasDefaultProject, isCodeSSHDWorkspace, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -33,9 +33,9 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
+	const projects: string[] = await getProjects();
 	if (await isLoggedIn()) {
-		await validateCurrentProject();
-		updateRemoteSSHTargets();
+		updateRemoteSSHTargets(projects);
 	}
 
 	const connectCmd = vscode.commands.registerCommand('devspaces.connect.cluster', async () => {
@@ -53,11 +53,12 @@ export async function activate(context: vscode.ExtensionContext) {
 				return;
 			}
 
-			callOcLogin(apiURL);
+			await callOcLogin(apiURL);
 
-			await updateRemoteSSHTargets();
+			const projects: string[] = await getProjects();
+			await updateRemoteSSHTargets(projects);
 
-			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces();
+			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);
 			const match : DevWorkspaceInfo | undefined = devspaces.find(d => d.url === inputURL);
 			if (match) {
 				await vscode.commands.executeCommand("vscode.newWindow", {
@@ -93,16 +94,8 @@ export function getSSHExtension() : string | undefined {
 	}
 }
 
-async function validateCurrentProject() {
-	if (! await hasDefaultProject()) {
-		await updateDefaultProject();
-	}
-}
-
-async function updateRemoteSSHTargets() {
-	const sshdPods: PodInfo[] = (await getPods()).filter(async (p) => {
-		return p.name !== undefined && await isCodeSSHDWorkspace(p.name);
-	});
+async function updateRemoteSSHTargets(inputProjects?: string[]) {
+	const sshdPods: PodInfo[] = await getPods(inputProjects);
 
 	// TODO: Create ssh config if not present
 	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
@@ -117,17 +110,16 @@ async function updateRemoteSSHTargets() {
 	const portForwardEntries: PortForwardInfo[] = [];
 	let devspaceHostEntriesData = '';
 	for (const pod of sshdPods) {
-		if (pod.name !== undefined && pod.id !== undefined) {
-			const privateKey = await getPrivateKey(pod.name);
+		if (pod.project !== undefined && pod.name !== undefined && pod.id !== undefined) {
+			const privateKey = await getPrivateKey(pod);
 			if (privateKey) {
 				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
-				const currPF = await getExistingPortForwardEntry(pod.name);
+				const currPF = await getExistingPortForwardEntry(pod);
 				const localPort = currPF ? currPF.port : Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
-				const user = await getUser(pod.name);
-				const namespace = await getNameSpace(pod.name);
+				const user = await getUser(pod);
 				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
-				portForwardEntries.push({namespace: namespace, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
+				portForwardEntries.push({namespace: pod.project, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
 				devspaceHostEntriesData += devspaceHostEntry;
 			}
 		}
@@ -197,7 +189,7 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 
 	for (const pf of getSavedPorts()) {
 		const entryExists = result.some(e => e.name === pf.name && e.namespace === pf.namespace && e.port === pf.port);
-		const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name) : false;
+		const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name && p.project === pf.namespace) : false;
 		const portAvailable = await isPortAvailable(pf.port, 1000);
 		getDevSpacesOutputLog().appendLine(`pid: ${pf.pid} name: ${pf.name} ${podRunning ? '(running)' : '(stopped)'} ns: ${pf.namespace} port: ${pf.port} ${portAvailable ? '(available)' : '(stopped)'}`);
 		if (portAvailable && podRunning && !entryExists) {

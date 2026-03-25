@@ -11,12 +11,14 @@ const isWindows = process.platform.indexOf('win') === 0;
 const QUOTE = isWindows ? '"' : '\'';
 
 export class DevWorkspaceInfo {
+    project: string | undefined; // project
     id: string | undefined; // status.devworkspaceId
     url: string | undefined; // status.mainUrl
     status: string | undefined; // status.phase
 }
 
 export class PodInfo  {
+    project: string | undefined; // project
     name: string | undefined; // metadata.name
     id: string | undefined; // metadata.labels.controller\.devfile\.io/devworkspace_name
     status: string | undefined; // status.phase
@@ -40,64 +42,79 @@ export async function callOcLogin(apiURL : string) {
     await loginCmd.spawn(`${ocCmd} login --server=${apiURL} --web`);
 }
 
-export async function getDevWorkspaces(): Promise<DevWorkspaceInfo[]> {
+export async function getDevWorkspaces(inputProjects?: string[]): Promise<DevWorkspaceInfo[]> {
+    let projects: string[];
+    if (!inputProjects) {
+        projects = await getProjects();
+    } else {
+        projects = inputProjects;
+    }
     const dwInfo: DevWorkspaceInfo[] = [];
-    const getWorkspacesCmd : CliCommand = new CliCommand();
-    await getWorkspacesCmd.spawn(`${ocCmd} get devworkspace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}${QUOTE}`);
-    const output = getWorkspacesCmd.getOutput();
-    if (output) {
-        const devworkspacesEntries = output.substring(1).split(';');
-        for (const dw of devworkspacesEntries) {
-            const id = dw.split(',')[0];
-            const url = dw.split(',')[1];
-            const status = dw.split(',')[2];
-            dwInfo.push({ id: id, url: url, status: status});
+    for (const project of projects) {
+        const getWorkspacesCmd : CliCommand = new CliCommand();
+        await getWorkspacesCmd.spawn(`${ocCmd} get devworkspace -n ${project} -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.status.mainUrl},{.status.phase}{end}${QUOTE}`);
+        const output = getWorkspacesCmd.getOutput();
+        if (output) {
+            const devworkspacesEntries = output.substring(1).split(';');
+            for (const dw of devworkspacesEntries) {
+                const id = dw.split(',')[0];
+                const url = dw.split(',')[1];
+                const status = dw.split(',')[2];
+                dwInfo.push({project: project, id: id, url: url, status: status});
+            }
         }
     }
     return dwInfo;
 }
 
-export async function getPods(): Promise<PodInfo[]> {
+export async function getPods(inputProjects?: string[]): Promise<PodInfo[]> {
+    let projects: string[];
+    if (!inputProjects) {
+        projects = await getProjects();
+    } else {
+        projects = inputProjects;
+    }
     const podInfo: PodInfo[] = [];
-    const getPodsCmd : CliCommand = new CliCommand();
-    await getPodsCmd.spawn(`${ocCmd} get pods -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}${QUOTE}`);
-    const output = getPodsCmd.getOutput();
-    if (output) {
-        const podEntries = output.substring(1).split(';');
-        for (const pod of podEntries) {
-            const name = pod.split(',')[0];
-            const id = pod.split(',')[1];
-            const status = pod.split(',')[2];
-            podInfo.push({id: id, name: name, status: status});
+
+    for (const project of projects) {
+        const getPodsCmd : CliCommand = new CliCommand();
+        await getPodsCmd.spawn(`${ocCmd} get pods -n ${project} -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.labels.controller\\.devfile\\.io/devworkspace_name},{.status.phase}{end}${QUOTE}`);
+        const output = getPodsCmd.getOutput();
+        if (output) {
+            const podEntries = output.substring(1).split(';');
+            for (const podEntry of podEntries) {
+                const name = podEntry.split(',')[0];
+                const id = podEntry.split(',')[1];
+                const status = podEntry.split(',')[2];
+                const pod: PodInfo = { project: project, id: id, name: name, status: status };
+                if (pod.name && await isCodeSSHDWorkspace(pod)) {
+                    podInfo.push(pod);
+                }
+            }
         }
     }
     return podInfo;
 }
 
-export async function isCodeSSHDWorkspace(podName: string): Promise<boolean> {
+export async function isCodeSSHDWorkspace(pod: PodInfo): Promise<boolean> {
     const isCodeSSHDWorkspaceCmd: CliCommand = new CliCommand();
-    await isCodeSSHDWorkspaceCmd.spawn(`${ocCmd} set env pod/${podName} --list`);
+    await isCodeSSHDWorkspaceCmd.spawn(`${ocCmd} set env -n ${pod.project} pod/${pod.name} --list`);
     const stdout = isCodeSSHDWorkspaceCmd.getOutput();
     return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd');
 }
 
-export async function isDevSpaces324(podName: string): Promise<boolean> {
+export async function isDevSpaces324(pod: PodInfo): Promise<boolean> {
     const devspacesVersion: CliCommand = new CliCommand();
-    await devspacesVersion.spawn(`${ocCmd} exec pods/${podName} -c che-code-sshd -- /bin/bash -c "ls -1 /sshd"`);
+    await devspacesVersion.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c che-code-sshd -- /bin/bash -c "ls -1 /sshd"`);
     const exitCode = devspacesVersion.getExiteCode();
     return exitCode == 0;
 }
 
-export async function getDevWorkspaceMainPage(podName: string): Promise<string | undefined> {
-    const pods: PodInfo[] = await getPods();
-    const match : PodInfo | undefined = pods.find(p => p.name === podName);
-    if (match) {
-        const mainContainerCmd: CliCommand = new CliCommand();
-        await mainContainerCmd.spawn(`${ocCmd} get devworkspace ${match.id} -o "jsonpath={.spec.template.components[0].name}"`);
-        const mainContainer = mainContainerCmd.getOutput();
-        return mainContainer;
-    }
-    return undefined;
+export async function getDevWorkspaceMainPage(pod: PodInfo): Promise<string | undefined> {
+    const mainContainerCmd: CliCommand = new CliCommand();
+    await mainContainerCmd.spawn(`${ocCmd} get devworkspace -n ${pod.project} ${pod.id} -o "jsonpath={.spec.template.components[0].name}"`);
+    const mainContainer = mainContainerCmd.getOutput();
+    return mainContainer;
 }
 
 export async function createPortForward(namespace: string, podName: string, port: number): Promise<CliCommand> {
@@ -109,15 +126,15 @@ export async function createPortForward(namespace: string, podName: string, port
     return portForward;
 }
 
-export async function getPrivateKey(podName: string): Promise<string | undefined> {
+export async function getPrivateKey(pod: PodInfo): Promise<string | undefined> {
     const privateKeyCmd: CliCommand = new CliCommand();
     let mainContainer = undefined;
-    if (await isDevSpaces324(podName)) {
+    if (await isDevSpaces324(pod)) {
         mainContainer = 'che-code-sshd';
-        await privateKeyCmd.spawn(`${ocCmd} exec pods/${podName} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
+        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     } else {
-        mainContainer = await getDevWorkspaceMainPage(podName);
-        await privateKeyCmd.spawn(`${ocCmd} exec pods/${podName} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /sshd/ssh_client_ed25519_key${QUOTE}`, false, false, true);
+        mainContainer = await getDevWorkspaceMainPage(pod);
+        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /sshd/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     }
     if (mainContainer) {
         const privateKey = privateKeyCmd.getOutput();
@@ -126,31 +143,18 @@ export async function getPrivateKey(podName: string): Promise<string | undefined
     return undefined;
 }
 
-export async function getUser(podName: string): Promise<string> {
+export async function getUser(pod: PodInfo): Promise<string> {
     const whoamiCmd: CliCommand = new CliCommand();
     let mainContainer = undefined;
-    if (await isDevSpaces324(podName)) {
+    if (await isDevSpaces324(pod)) {
         mainContainer = 'che-code-sshd';
-        await whoamiCmd.spawn(`${ocCmd} exec pods/${podName} -c ${mainContainer} -- whoami`);
+        await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- whoami`);
     } else {
-        mainContainer = await getDevWorkspaceMainPage(podName);
-        await whoamiCmd.spawn(`${ocCmd} exec pods/${podName} -c ${mainContainer} -- cat /sshd/username`);
+        mainContainer = await getDevWorkspaceMainPage(pod);
+        await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- cat /sshd/username`);
     }
     const whoami = whoamiCmd.getOutput().trim();
     return whoami;
-}
-
-export async function getNameSpace(podName: string): Promise<string> {
-    const namespaceCmd: CliCommand = new CliCommand();
-    let sshdPageContainer = undefined;
-    if (await isDevSpaces324(podName)) {
-        sshdPageContainer = 'che-code-sshd';
-    } else {
-        sshdPageContainer = 'che-code-sshd-page';
-    }
-    await namespaceCmd.spawn(`${ocCmd} exec pods/${podName} -c ${sshdPageContainer} -- /bin/bash -c ${QUOTE}echo -n $DEVWORKSPACE_NAMESPACE${QUOTE}`);
-    const namespace = namespaceCmd.getOutput();
-    return namespace;
 }
 
 export function getOpenShiftApiURL(inputURL: string) {
@@ -182,9 +186,9 @@ Host ${devworkspaceId}
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
 }
 
-export async function getExistingPortForwardEntry(podName: string): Promise<PortForwardInfo | undefined> {
+export async function getExistingPortForwardEntry(pod: PodInfo): Promise<PortForwardInfo | undefined> {
     const savedPorts: PortForwardInfo[] = getSavedPorts();
-    const match = savedPorts.find(pf => pf.name === podName);
+    const match = savedPorts.find(pf => pf.name === pod.name && pf.namespace === pod.project);
     if (match?.port && await isPortAvailable(match?.port, 1000)) {
         return match;
     }
@@ -222,19 +226,26 @@ export async function hasDefaultProject() : Promise<boolean> {
     return code === 0;
 }
 
-export async function updateDefaultProject() {
+export async function getProjects(): Promise<string[]> {
     const projListCmd: CliCommand = new CliCommand();
     await projListCmd.spawn(`${ocCmd} projects -q`);
     const code = projListCmd.getExiteCode();
     if (code === 0) {
         const projList: string[] = projListCmd.getOutput().split('\n').map(p => p.trim()).filter(p => p !== '');
-        if (projList.length > 0) {
-            const inputProject = await vscode.window.showQuickPick(projList, { title: 'No project configured. Select a default project' });
-            getDevSpacesOutputLog().appendLine(`Setting project to : ${inputProject}`);
-            const setProjCmd: CliCommand = new CliCommand();
-            await setProjCmd.spawn(`${ocCmd} project ${inputProject}`);
-        } else {
-            getDevSpacesOutputLog().appendLine(`No projects were detected for the current user.`);
-        }
+        return projList;
+    } else {
+        return [];
+    }
+}
+
+export async function updateDefaultProject() {
+    const projList: string[] = await getProjects();
+    if (projList.length > 0) {
+        const inputProject = await vscode.window.showQuickPick(projList, { title: 'No project configured. Select a default project' });
+        getDevSpacesOutputLog().appendLine(`Setting project to : ${inputProject}`);
+        const setProjCmd: CliCommand = new CliCommand();
+        await setProjCmd.spawn(`${ocCmd} project ${inputProject}`);
+    } else {
+        getDevSpacesOutputLog().appendLine(`No projects were detected for the current user.`);
     }
 }
