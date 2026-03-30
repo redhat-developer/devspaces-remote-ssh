@@ -2,7 +2,7 @@
 	"name": "devspaces-remote-ssh",
 	"displayName": "Dev Spaces Local/Remote Support - SSH",
 	"description": "Support for connecting a local VS Code instance to a Dev Workspace under Red Hat OpenShift Dev Spaces over SSH",
-	"version": "0.1.0",
+	"version": "0.2.0",
 	"author": "Red Hat",
 	"publisher": "redhat",
 	"icon": "images/devspaces-icon.png",
