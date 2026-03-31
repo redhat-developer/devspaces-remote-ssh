@@ -103,7 +103,12 @@ export async function isCodeSSHDWorkspace(pod: PodInfo): Promise<boolean> {
     return stdout.includes('DEVWORKSPACE_COMPONENT_NAME=che-code-sshd');
 }
 
-export async function isDevSpaces324(pod: PodInfo): Promise<boolean> {
+/**
+ * Early versions of local/remote support (Dev Spaces 3.24 & 3.25)
+ * had the SSHD service in a hard-coded 'che-code-sshd' container
+ * that was not the main development container
+ */
+export async function isLegacyDevSpaces(pod: PodInfo): Promise<boolean> {
     const devspacesVersion: CliCommand = new CliCommand();
     await devspacesVersion.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c che-code-sshd -- /bin/bash -c "ls -1 /sshd"`);
     const exitCode = devspacesVersion.getExiteCode();
@@ -129,7 +134,7 @@ export async function createPortForward(namespace: string, podName: string, port
 export async function getPrivateKey(pod: PodInfo): Promise<string | undefined> {
     const privateKeyCmd: CliCommand = new CliCommand();
     let mainContainer = undefined;
-    if (await isDevSpaces324(pod)) {
+    if (await isLegacyDevSpaces(pod)) {
         mainContainer = 'che-code-sshd';
         await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     } else {
@@ -146,7 +151,7 @@ export async function getPrivateKey(pod: PodInfo): Promise<string | undefined> {
 export async function getUser(pod: PodInfo): Promise<string> {
     const whoamiCmd: CliCommand = new CliCommand();
     let mainContainer = undefined;
-    if (await isDevSpaces324(pod)) {
+    if (await isLegacyDevSpaces(pod)) {
         mainContainer = 'che-code-sshd';
         await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- whoami`);
     } else {
@@ -248,4 +253,16 @@ export async function updateDefaultProject() {
     } else {
         getDevSpacesOutputLog().appendLine(`No projects were detected for the current user.`);
     }
+}
+
+export async function showSSHDLogs(pod: PodInfo, terminal: vscode.Terminal) {
+    let mainContainer = undefined;
+    if (await isLegacyDevSpaces(pod)) {
+        mainContainer = 'che-code-sshd';
+        terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
+    } else {
+        mainContainer = await getDevWorkspaceMainPage(pod);
+        terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
+    }
+    terminal.show();
 }

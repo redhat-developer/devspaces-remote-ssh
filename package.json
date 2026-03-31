@@ -36,6 +36,11 @@
 					"command": "devspaces.connect.cluster",
 					"group": "inline",
 					"when": "viewItem == remote-explorer.sshGroup"
+				},
+				{
+					"command": "devspaces.sshd.logs",
+					"group": "navigation",
+					"when": "viewItem == remote-explorer.sshRemoteTarget || viewItem =~ /^openremotessh.explorer.host$/"
 				}
 			],
 			"view/title": [
@@ -62,8 +67,8 @@
 				}
 			},
 			{
-				"command": "devspaces.update.project",
-				"title": "Update Default Project",
+				"command": "devspaces.sshd.logs",
+				"title": "Get SSHD Logs",
 				"category": "Dev Spaces"
 			}
 		]

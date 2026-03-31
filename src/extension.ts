@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -73,8 +73,24 @@ export async function activate(context: vscode.ExtensionContext) {
 		updateDefaultProject();
 	});
 
+	const getSSHDLogsCmd = vscode.commands.registerCommand('devspaces.sshd.logs', async (element: SshItem) => {
+		const label: string = element.label;
+		const sshdPods: PodInfo[] = await getPods();
+		const match : PodInfo | undefined = sshdPods.find(p => p.id === label);
+
+		if (match) {
+			const terminal = vscode.window.createTerminal(`${match.id} Logs`);
+			showSSHDLogs(match, terminal);
+		}
+	});
+
 	context.subscriptions.push(connectCmd);
 	context.subscriptions.push(updateDefaultProjectCmd);
+	context.subscriptions.push(getSSHDLogsCmd);
+}
+
+interface SshItem {
+    label: string;
 }
 
 export function getDevSpacesOutputLog() : vscode.OutputChannel {
