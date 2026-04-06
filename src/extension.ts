@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjectFromWorkspaceURL, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -33,8 +33,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	const projects: string[] = await getProjects();
 	if (await isLoggedIn()) {
+		const projects: string[] = await getProjects();
 		updateRemoteSSHTargets(projects);
 	}
 
@@ -55,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			await callOcLogin(apiURL);
 
-			const projects: string[] = await getProjects();
+			const projects: string[] = await getProjectFromWorkspaceURL(inputURL);
 			await updateRemoteSSHTargets(projects);
 
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);

@@ -162,6 +162,40 @@ export async function getUser(pod: PodInfo): Promise<string> {
     return whoami;
 }
 
+/**
+ * Extracts the DevSpaces namespace from a workspace landing page URL.
+ *
+ * URL format: https://<cluster>/<username>/<workspace-name>/<port>/
+ * The workspace name is the second path segment. We query the DevWorkspace CR
+ * by name across all namespaces to resolve the namespace directly.
+ */
+export async function getProjectFromWorkspaceURL(inputURL: string): Promise<string[]> {
+    try {
+        const url = new URL(inputURL);
+        const pathParts = url.pathname.split('/').filter(p => p !== '');
+        if (pathParts.length >= 2) {
+            const workspaceName = pathParts[1];
+            getDevSpacesOutputLog().appendLine(`Extracted workspace name from URL: ${workspaceName}`);
+
+            const dwCmd: CliCommand = new CliCommand();
+            await dwCmd.spawn(
+                `${ocCmd} get devworkspace --all-namespaces --field-selector=metadata.name=${workspaceName} -o ${QUOTE}jsonpath={.items[0].metadata.namespace}${QUOTE}`
+            );
+            if (dwCmd.getExiteCode() === 0) {
+                const ns = dwCmd.getOutput().trim();
+                if (ns) {
+                    getDevSpacesOutputLog().appendLine(`Resolved namespace from workspace URL: ${ns}`);
+                    return [ns];
+                }
+            }
+        }
+    } catch (err) {
+        getDevSpacesOutputLog().appendLine(`Failed to extract namespace from URL: ${String(err)}`);
+    }
+    // Fall back to label-based discovery
+    return getProjects();
+}
+
 export function getOpenShiftApiURL(inputURL: string) {
     try {
         const host = new URL(inputURL);
@@ -187,7 +221,7 @@ Host ${devworkspaceId}
   HostName 127.0.0.1
   Port ${port}
   User ${userName}
-  IdentityFile ${identityPath}
+  IdentityFile "${identityPath}"
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
 }
 
@@ -231,16 +265,56 @@ export async function hasDefaultProject() : Promise<boolean> {
     return code === 0;
 }
 
+/**
+ * Returns only the DevSpaces workspace namespaces that belong to the current user.
+ *
+ * Uses the `app.kubernetes.io/component=workspaces-namespace` label (set by the
+ * DevSpaces operator on every user namespace) to query only DevSpaces namespaces
+ * in a single API call, then filters client-side by the `che.eclipse.org/username`
+ * annotation to find the one(s) owned by the current user.
+ */
 export async function getProjects(): Promise<string[]> {
-    const projListCmd: CliCommand = new CliCommand();
-    await projListCmd.spawn(`${ocCmd} projects -q`);
-    const code = projListCmd.getExiteCode();
-    if (code === 0) {
-        const projList: string[] = projListCmd.getOutput().split('\n').map(p => p.trim()).filter(p => p !== '');
-        return projList;
-    } else {
+    // 1. Get the current username
+    const whoamiCmd: CliCommand = new CliCommand();
+    await whoamiCmd.spawn(`${ocCmd} whoami`);
+    const username = whoamiCmd.getOutput().trim();
+    if (!username) {
+        getDevSpacesOutputLog().appendLine('Could not determine current user via oc whoami');
         return [];
     }
+
+    // 2. Query only namespaces labelled as DevSpaces workspace namespaces
+    const nsCmd: CliCommand = new CliCommand();
+    await nsCmd.spawn(
+        `${ocCmd} get namespaces -l app.kubernetes.io/component=workspaces-namespace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.annotations.che\\.eclipse\\.org/username}{end}${QUOTE}`
+    );
+    const code = nsCmd.getExiteCode();
+    if (code !== 0) {
+        getDevSpacesOutputLog().appendLine('Failed to query DevSpaces namespaces by label');
+        return [];
+    }
+
+    const output = nsCmd.getOutput();
+    if (!output) {
+        return [];
+    }
+
+    // 3. Filter client-side by the che.eclipse.org/username annotation
+    const projects: string[] = [];
+    const entries = output.substring(1).split(';');
+    for (const entry of entries) {
+        const [ns, owner] = entry.split(',');
+        if (ns && owner === username) {
+            projects.push(ns);
+            getDevSpacesOutputLog().appendLine(`Found DevSpaces namespace: ${ns} (owner: ${owner})`);
+        }
+    }
+
+    if (projects.length === 0) {
+        getDevSpacesOutputLog().appendLine(`No DevSpaces namespace found for user: ${username}`);
+    }
+
+    return projects;
 }
 
 export async function updateDefaultProject() {
