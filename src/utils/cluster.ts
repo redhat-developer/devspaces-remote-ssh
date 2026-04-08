@@ -163,52 +163,54 @@ export async function getUser(pod: PodInfo): Promise<string> {
 }
 
 /**
- * Extracts the DevSpaces namespace from a workspace landing page URL.
+ * Resolves the OpenShift API URL from a DevSpaces workspace URL.
  *
- * URL format: https://<cluster>/<username>/<workspace-name>/<port>/
- * The workspace name is the second path segment. We query the DevWorkspace CR
- * by name across all namespaces to resolve the namespace directly.
+ * Hits the /oauth/start endpoint on the DevSpaces host (unauthenticated) which
+ * redirects to oauth-openshift.apps.<cluster-domain>. The cluster domain is
+ * extracted and the API URL is derived as https://api.<cluster-domain>:6443.
+ *
+ * Works for both standard (.apps.) and custom domain URLs.
+ * Uses Node.js https module instead of curl for cross-platform compatibility.
  */
-export async function getProjectFromWorkspaceURL(inputURL: string): Promise<string[]> {
-    try {
-        const url = new URL(inputURL);
-        const pathParts = url.pathname.split('/').filter(p => p !== '');
-        if (pathParts.length >= 2) {
-            const workspaceName = pathParts[1];
-            getDevSpacesOutputLog().appendLine(`Extracted workspace name from URL: ${workspaceName}`);
-
-            const dwCmd: CliCommand = new CliCommand();
-            await dwCmd.spawn(
-                `${ocCmd} get devworkspace --all-namespaces --field-selector=metadata.name=${workspaceName} -o ${QUOTE}jsonpath={.items[0].metadata.namespace}${QUOTE}`
-            );
-            if (dwCmd.getExiteCode() === 0) {
-                const ns = dwCmd.getOutput().trim();
-                if (ns) {
-                    getDevSpacesOutputLog().appendLine(`Resolved namespace from workspace URL: ${ns}`);
-                    return [ns];
-                }
-            }
-        }
-    } catch (err) {
-        getDevSpacesOutputLog().appendLine(`Failed to extract namespace from URL: ${String(err)}`);
-    }
-    // Fall back to label-based discovery
-    return getProjects();
-}
-
-export function getOpenShiftApiURL(inputURL: string) {
+export async function getOpenShiftApiURL(inputURL: string): Promise<string | undefined> {
     try {
         const host = new URL(inputURL);
-        let key = '';
-        if (host.host.indexOf('.apps-') > 0) {
-            key = '.apps-';
-        } else if (host.host.indexOf('.apps.') > 0) {
-            key = '.apps.';
-        } else {
+        const oauthStartURL = `${host.protocol}//${host.host}/oauth/start`;
+
+        getDevSpacesOutputLog().appendLine(`Discovering cluster API URL via ${oauthStartURL}`);
+
+        // Follow the /oauth/start redirect to discover the real cluster hostname
+        const redirectURL = await new Promise<string | undefined>((resolve) => {
+            const mod = host.protocol === 'https:' ? require('https') : require('http');
+            const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: { statusCode: number; headers: { location?: string } }) => {
+                if (res.statusCode === 302 && res.headers.location) {
+                    resolve(res.headers.location);
+                } else {
+                    resolve(undefined);
+                }
+            });
+            req.on('error', () => resolve(undefined));
+            req.setTimeout(10000, () => { req.destroy(); resolve(undefined); });
+        });
+
+        if (!redirectURL) {
+            getDevSpacesOutputLog().appendLine('No redirect received from /oauth/start');
             return undefined;
         }
-        const hostTLD = `${host.host.substring(host.host.indexOf(key) + key.length)}`;
-        return `${host.protocol}//api.${hostTLD}:6443`;
+
+        // Redirect URL is: https://oauth-openshift.apps.<cluster-domain>/oauth/authorize?...
+        // Strip "oauth-openshift.apps." prefix to get the cluster domain
+        const oauthHost = new URL(redirectURL).hostname;
+        const prefix = 'oauth-openshift.apps.';
+        if (!oauthHost.startsWith(prefix)) {
+            getDevSpacesOutputLog().appendLine(`Unexpected OAuth hostname: ${oauthHost}`);
+            return undefined;
+        }
+
+        const clusterDomain = oauthHost.substring(prefix.length);
+        const apiURL = `https://api.${clusterDomain}:6443`;
+        getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
+        return apiURL;
     } catch (err) {
         getDevSpacesOutputLog().appendLine(String(err));
         return undefined;
@@ -268,10 +270,12 @@ export async function hasDefaultProject() : Promise<boolean> {
 /**
  * Returns only the DevSpaces workspace namespaces that belong to the current user.
  *
- * Uses the `app.kubernetes.io/component=workspaces-namespace` label (set by the
- * DevSpaces operator on every user namespace) to query only DevSpaces namespaces
- * in a single API call, then filters client-side by the `che.eclipse.org/username`
- * annotation to find the one(s) owned by the current user.
+ * Queries OpenShift Projects (not Namespaces, to avoid cluster-scope permission issues)
+ * using the `app.kubernetes.io/component=workspaces-namespace` label set by the
+ * DevSpaces operator on every user namespace. Filters client-side by the
+ * `che.eclipse.org/username` annotation using case-insensitive exact matching.
+ *
+ * Returns all matching namespaces (a user may have more than one).
  */
 export async function getProjects(): Promise<string[]> {
     // 1. Get the current username
@@ -283,28 +287,30 @@ export async function getProjects(): Promise<string[]> {
         return [];
     }
 
-    // 2. Query only namespaces labelled as DevSpaces workspace namespaces
-    const nsCmd: CliCommand = new CliCommand();
-    await nsCmd.spawn(
-        `${ocCmd} get namespaces -l app.kubernetes.io/component=workspaces-namespace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.annotations.che\\.eclipse\\.org/username}{end}${QUOTE}`
+    // 2. Query projects with the DevSpaces workspace label
+    //    Uses the Project API (user-scoped) instead of Namespace API (cluster-scoped)
+    //    to avoid "cannot list namespaces at cluster scope" errors for regular users
+    const projCmd: CliCommand = new CliCommand();
+    await projCmd.spawn(
+        `${ocCmd} get projects -l app.kubernetes.io/component=workspaces-namespace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.annotations.che\\.eclipse\\.org/username}{end}${QUOTE}`
     );
-    const code = nsCmd.getExiteCode();
-    if (code !== 0) {
-        getDevSpacesOutputLog().appendLine('Failed to query DevSpaces namespaces by label');
+    if (projCmd.getExiteCode() !== 0) {
+        getDevSpacesOutputLog().appendLine('Failed to query DevSpaces projects by label');
         return [];
     }
 
-    const output = nsCmd.getOutput();
+    const output = projCmd.getOutput();
     if (!output) {
         return [];
     }
 
-    // 3. Filter client-side by the che.eclipse.org/username annotation
+    // 3. Filter by che.eclipse.org/username annotation (case-insensitive exact match)
     const projects: string[] = [];
     const entries = output.substring(1).split(';');
+    const usernameLower = username.toLowerCase();
     for (const entry of entries) {
         const [ns, owner] = entry.split(',');
-        if (ns && owner === username) {
+        if (ns && owner && owner.toLowerCase() === usernameLower) {
             projects.push(ns);
             getDevSpacesOutputLog().appendLine(`Found DevSpaces namespace: ${ns} (owner: ${owner})`);
         }

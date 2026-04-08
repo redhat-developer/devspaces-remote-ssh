@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjectFromWorkspaceURL, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
 import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -46,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		});
 
 		if (inputURL) {
-			const apiURL = getOpenShiftApiURL(inputURL);
+			const apiURL = await getOpenShiftApiURL(inputURL);
 			if (apiURL === undefined) {
 				vscode.window.showErrorMessage(
 					`The URL does not appear to be valid, and a connection could not be established.`);
@@ -55,7 +55,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
 			await callOcLogin(apiURL);
 
-			const projects: string[] = await getProjectFromWorkspaceURL(inputURL);
+			const projects: string[] = await getProjects();
 			await updateRemoteSSHTargets(projects);
 
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);
