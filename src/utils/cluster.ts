@@ -4,6 +4,8 @@ import { getDevSpacesOutputLog, ocCmd } from "../extension";
 import { CliCommand } from "./command";
 import { platform } from 'os';
 import { getSavedPorts } from "./io";
+import http from 'http';
+import https from 'https';
 
 const isWindows = process.platform.indexOf('win') === 0;
 // Need to preserve variables from being evaluated in the local shell
@@ -168,6 +170,8 @@ export async function getUser(pod: PodInfo): Promise<string> {
  * Hits the /oauth/start endpoint on the DevSpaces host (unauthenticated) which
  * redirects to oauth-openshift.apps.<cluster-domain>. The cluster domain is
  * extracted and the API URL is derived as https://api.<cluster-domain>:6443.
+ * If this approach fails, falls back to extracting host directly from the
+ * original URL.
  *
  * Works for both standard (.apps.) and custom domain URLs.
  * Uses Node.js https module instead of curl for cross-platform compatibility.
@@ -181,8 +185,8 @@ export async function getOpenShiftApiURL(inputURL: string): Promise<string | und
 
         // Follow the /oauth/start redirect to discover the real cluster hostname
         const redirectURL = await new Promise<string | undefined>((resolve) => {
-            const mod = host.protocol === 'https:' ? require('https') : require('http');
-            const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: { statusCode: number; headers: { location?: string } }) => {
+            const mod = host.protocol === 'https:' ? https : http;
+            const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: http.IncomingMessage) => {
                 if (res.statusCode === 302 && res.headers.location) {
                     resolve(res.headers.location);
                 } else {
@@ -193,24 +197,35 @@ export async function getOpenShiftApiURL(inputURL: string): Promise<string | und
             req.setTimeout(10000, () => { req.destroy(); resolve(undefined); });
         });
 
-        if (!redirectURL) {
+        if (redirectURL) {
+            // Redirect URL is: https://oauth-openshift.apps.<cluster-domain>/oauth/authorize?...
+            // Strip "oauth-openshift.apps." prefix to get the cluster domain
+            const oauthHost = new URL(redirectURL).hostname;
+            const prefix = 'oauth-openshift.apps.';
+            if (oauthHost.startsWith(prefix)) {
+                const clusterDomain = oauthHost.substring(prefix.length);
+                const apiURL = `https://api.${clusterDomain}:6443`;
+                getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
+                return apiURL;
+            } else {
+                getDevSpacesOutputLog().appendLine(`Unexpected OAuth hostname: ${oauthHost}`);
+            }
+        } else {
             getDevSpacesOutputLog().appendLine('No redirect received from /oauth/start');
+        }
+
+        // Fall back to basic approach
+        let key = '';
+        if (host.host.indexOf('.apps-') > 0) {
+            key = '.apps-';
+        } else if (host.host.indexOf('.apps.') > 0) {
+            key = '.apps.';
+        } else {
             return undefined;
         }
 
-        // Redirect URL is: https://oauth-openshift.apps.<cluster-domain>/oauth/authorize?...
-        // Strip "oauth-openshift.apps." prefix to get the cluster domain
-        const oauthHost = new URL(redirectURL).hostname;
-        const prefix = 'oauth-openshift.apps.';
-        if (!oauthHost.startsWith(prefix)) {
-            getDevSpacesOutputLog().appendLine(`Unexpected OAuth hostname: ${oauthHost}`);
-            return undefined;
-        }
-
-        const clusterDomain = oauthHost.substring(prefix.length);
-        const apiURL = `https://api.${clusterDomain}:6443`;
-        getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
-        return apiURL;
+        const hostTLD = `${host.host.substring(host.host.indexOf(key) + key.length)}`;
+        return `${host.protocol}//api.${hostTLD}:6443`;
     } catch (err) {
         getDevSpacesOutputLog().appendLine(String(err));
         return undefined;
