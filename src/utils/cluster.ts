@@ -4,6 +4,8 @@ import { getDevSpacesOutputLog, ocCmd } from "../extension";
 import { CliCommand } from "./command";
 import { platform } from 'os';
 import { getSavedPorts } from "./io";
+import http from 'http';
+import https from 'https';
 
 const isWindows = process.platform.indexOf('win') === 0;
 // Need to preserve variables from being evaluated in the local shell
@@ -162,9 +164,57 @@ export async function getUser(pod: PodInfo): Promise<string> {
     return whoami;
 }
 
-export function getOpenShiftApiURL(inputURL: string) {
+/**
+ * Resolves the OpenShift API URL from a DevSpaces workspace URL.
+ *
+ * Hits the /oauth/start endpoint on the DevSpaces host (unauthenticated) which
+ * redirects to oauth-openshift.apps.<cluster-domain>. The cluster domain is
+ * extracted and the API URL is derived as https://api.<cluster-domain>:6443.
+ * If this approach fails, falls back to extracting host directly from the
+ * original URL.
+ *
+ * Works for both standard (.apps.) and custom domain URLs.
+ * Uses Node.js https module instead of curl for cross-platform compatibility.
+ */
+export async function getOpenShiftApiURL(inputURL: string): Promise<string | undefined> {
     try {
         const host = new URL(inputURL);
+        const oauthStartURL = `${host.protocol}//${host.host}/oauth/start`;
+
+        getDevSpacesOutputLog().appendLine(`Discovering cluster API URL via ${oauthStartURL}`);
+
+        // Follow the /oauth/start redirect to discover the real cluster hostname
+        const redirectURL = await new Promise<string | undefined>((resolve) => {
+            const mod = host.protocol === 'https:' ? https : http;
+            const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: http.IncomingMessage) => {
+                if (res.statusCode === 302 && res.headers.location) {
+                    resolve(res.headers.location);
+                } else {
+                    resolve(undefined);
+                }
+            });
+            req.on('error', () => resolve(undefined));
+            req.setTimeout(10000, () => { req.destroy(); resolve(undefined); });
+        });
+
+        if (redirectURL) {
+            // Redirect URL is: https://oauth-openshift.apps.<cluster-domain>/oauth/authorize?...
+            // Strip "oauth-openshift.apps." prefix to get the cluster domain
+            const oauthHost = new URL(redirectURL).hostname;
+            const prefix = 'oauth-openshift.apps.';
+            if (oauthHost.startsWith(prefix)) {
+                const clusterDomain = oauthHost.substring(prefix.length);
+                const apiURL = `https://api.${clusterDomain}:6443`;
+                getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
+                return apiURL;
+            } else {
+                getDevSpacesOutputLog().appendLine(`Unexpected OAuth hostname: ${oauthHost}`);
+            }
+        } else {
+            getDevSpacesOutputLog().appendLine('No redirect received from /oauth/start');
+        }
+
+        // Fall back to basic approach
         let key = '';
         if (host.host.indexOf('.apps-') > 0) {
             key = '.apps-';
@@ -173,6 +223,7 @@ export function getOpenShiftApiURL(inputURL: string) {
         } else {
             return undefined;
         }
+
         const hostTLD = `${host.host.substring(host.host.indexOf(key) + key.length)}`;
         return `${host.protocol}//api.${hostTLD}:6443`;
     } catch (err) {
@@ -187,7 +238,7 @@ Host ${devworkspaceId}
   HostName 127.0.0.1
   Port ${port}
   User ${userName}
-  IdentityFile ${identityPath}
+  IdentityFile "${identityPath}"
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
 }
 
@@ -231,16 +282,60 @@ export async function hasDefaultProject() : Promise<boolean> {
     return code === 0;
 }
 
+/**
+ * Returns only the DevSpaces workspace namespaces that belong to the current user.
+ *
+ * Queries OpenShift Projects (not Namespaces, to avoid cluster-scope permission issues)
+ * using the `app.kubernetes.io/component=workspaces-namespace` label set by the
+ * DevSpaces operator on every user namespace. Filters client-side by the
+ * `che.eclipse.org/username` annotation using case-insensitive exact matching.
+ *
+ * Returns all matching namespaces (a user may have more than one).
+ */
 export async function getProjects(): Promise<string[]> {
-    const projListCmd: CliCommand = new CliCommand();
-    await projListCmd.spawn(`${ocCmd} projects -q`);
-    const code = projListCmd.getExiteCode();
-    if (code === 0) {
-        const projList: string[] = projListCmd.getOutput().split('\n').map(p => p.trim()).filter(p => p !== '');
-        return projList;
-    } else {
+    // 1. Get the current username
+    const whoamiCmd: CliCommand = new CliCommand();
+    await whoamiCmd.spawn(`${ocCmd} whoami`);
+    const username = whoamiCmd.getOutput().trim();
+    if (!username) {
+        getDevSpacesOutputLog().appendLine('Could not determine current user via oc whoami');
         return [];
     }
+
+    // 2. Query projects with the DevSpaces workspace label
+    //    Uses the Project API (user-scoped) instead of Namespace API (cluster-scoped)
+    //    to avoid "cannot list namespaces at cluster scope" errors for regular users
+    const projCmd: CliCommand = new CliCommand();
+    await projCmd.spawn(
+        `${ocCmd} get projects -l app.kubernetes.io/component=workspaces-namespace -o ${QUOTE}jsonpath={range .items[*]};{.metadata.name},{.metadata.annotations.che\\.eclipse\\.org/username}{end}${QUOTE}`
+    );
+    if (projCmd.getExiteCode() !== 0) {
+        getDevSpacesOutputLog().appendLine('Failed to query DevSpaces projects by label');
+        return [];
+    }
+
+    const output = projCmd.getOutput();
+    if (!output) {
+        return [];
+    }
+
+    // 3. Filter by che.eclipse.org/username annotation (case-insensitive exact match)
+    const projects: string[] = [];
+    const entries = output.substring(1).split(';');
+    const usernameLower = username.toLowerCase();
+    for (const entry of entries) {
+        const [ns, owner] = entry.split(',');
+        if (ns && owner && owner.toLowerCase() === usernameLower) {
+            projects.push(ns);
+            getDevSpacesOutputLog().appendLine(`Found DevSpaces namespace: ${ns} (owner: ${owner})`);
+        }
+    }
+
+    if (projects.length === 0) {
+        getDevSpacesOutputLog().appendLine(`No DevSpaces namespace found for user: ${username}`);
+    }
+
+    return projects;
 }
 
 export async function updateDefaultProject() {

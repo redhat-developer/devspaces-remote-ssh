@@ -33,8 +33,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	const projects: string[] = await getProjects();
 	if (await isLoggedIn()) {
+		const projects: string[] = await getProjects();
 		updateRemoteSSHTargets(projects);
 	}
 
@@ -46,7 +46,7 @@ export async function activate(context: vscode.ExtensionContext) {
 		});
 
 		if (inputURL) {
-			const apiURL = getOpenShiftApiURL(inputURL);
+			const apiURL = await getOpenShiftApiURL(inputURL);
 			if (apiURL === undefined) {
 				vscode.window.showErrorMessage(
 					`The URL does not appear to be valid, and a connection could not be established.`);
