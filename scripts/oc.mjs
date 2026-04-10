@@ -131,7 +131,7 @@ async function packageOc(vscodePlatform, version = '4.21.5') {
     // Pattern: openshift-client-${ocPlatform}[-rhel9]-${version}${archiveExt}
     // -rhel9 suffix is only present for linux-arm64 architectures
     const rhel9Suffix = isLinux && isArm64 ? '-rhel9' : '';
-    const url = `https://mirror.openshift.com/pub/openshift-v4/clients/ocp/stable/openshift-client-${ocPlatform}${rhel9Suffix}-${version}${archiveExt}`;
+    const url = `https://mirror.openshift.com/pub/openshift-v4/clients/ocp/${version}/openshift-client-${ocPlatform}${rhel9Suffix}-${version}${archiveExt}`;
 
     // Setup paths
     const outDir = getProjectPath('out', 'oc');
