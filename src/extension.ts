@@ -67,10 +67,26 @@ export async function activate(context: vscode.ExtensionContext) {
 				? devspaces.find(d => d.id === workspaceName)
 				: devspaces.find(d => d.url === inputURL);
 			if (match) {
-				const choice = await vscode.window.showQuickPick(
-					['Current Window', 'New Window'],
-					{ title: `Connect to ${match.id}`, placeHolder: 'Open connection in...' }
-				);
+				const windowStrategy = vscode.workspace.getConfiguration().get('devspaces.ssh.window.strategy');
+				let choice;
+				if (windowStrategy === 'prompt') {
+					choice = await vscode.window.showQuickPick(
+						['Current Window', 'New Window'],
+						{ title: `Connect to ${match.id}`, placeHolder: 'Open connection in...' });
+				} else {
+					switch (windowStrategy) {
+						case 'current':
+							choice = 'Current Window';
+							break;
+						case 'new':
+							choice = 'New Window';
+							break;
+						default:
+							choice = 'Current Window';
+							break;
+					}
+				}
+
 				if (choice) {
 					await vscode.commands.executeCommand("vscode.newWindow", {
 						remoteAuthority: `ssh-remote+${match.id}`,
