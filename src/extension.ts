@@ -59,12 +59,40 @@ export async function activate(context: vscode.ExtensionContext) {
 			await updateRemoteSSHTargets(projects);
 
 			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);
-			const match : DevWorkspaceInfo | undefined = devspaces.find(d => d.url === inputURL);
+			// Match by workspace name from URL path (second segment) instead of full URL
+			// to support custom domains where the input URL differs from the DevWorkspace mainUrl
+			const inputPath = new URL(inputURL).pathname.split('/').filter(p => p !== '');
+			const workspaceName = inputPath.length >= 2 ? inputPath[1] : undefined;
+			const match : DevWorkspaceInfo | undefined = workspaceName
+				? devspaces.find(d => d.id === workspaceName)
+				: devspaces.find(d => d.url === inputURL);
 			if (match) {
-				await vscode.commands.executeCommand("vscode.newWindow", {
-					remoteAuthority: `ssh-remote+${match.id}`,
-					reuseWindow: true,
-				});
+				const windowStrategy = vscode.workspace.getConfiguration().get('devspaces.ssh.window.strategy');
+				let choice;
+				if (windowStrategy === 'prompt') {
+					choice = await vscode.window.showQuickPick(
+						['Current Window', 'New Window'],
+						{ title: `Connect to ${match.id}`, placeHolder: 'Open connection in...' });
+				} else {
+					switch (windowStrategy) {
+						case 'current':
+							choice = 'Current Window';
+							break;
+						case 'new':
+							choice = 'New Window';
+							break;
+						default:
+							choice = 'Current Window';
+							break;
+					}
+				}
+
+				if (choice) {
+					await vscode.commands.executeCommand("vscode.newWindow", {
+						remoteAuthority: `ssh-remote+${match.id}`,
+						reuseWindow: choice === 'Current Window',
+					});
+				}
 			}
 		}
 	});

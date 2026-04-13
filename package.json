@@ -71,7 +71,28 @@
 				"title": "Get SSHD Logs",
 				"category": "Dev Spaces"
 			}
-		]
+		],
+		"configuration":  {
+			"title": "Dev Spaces Local/Remote Support - SSH",
+			"properties": {
+				"devspaces.ssh.window.strategy": {
+					"type": "string",
+					"enum": [
+						"current",
+						"new",
+						"prompt"
+					],
+					"enumDescriptions": [
+						"Connect in the current editor",
+						"Connect in a new editor",
+						"Ask every time"
+					],
+					"default": "current",
+					"markdownDescription": "How connecting to a developer workspace should be done.",
+					"scope": "window"
+				}
+			}
+		}
 	},
 	"scripts": {
 		"vscode:prepublish": "npm run compile",
