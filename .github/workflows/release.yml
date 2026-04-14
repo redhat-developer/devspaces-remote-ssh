@@ -132,7 +132,6 @@ jobs:
             ovsx publish --skip-duplicate -p ${{ secrets.OVSX_MARKETPLACE_TOKEN }}  --packagePath ${platformVsix}
           done
       - name: Delete saved artifact
-        if: always()
         uses: geekyeggo/delete-artifact@e46cfb9575865f907c2beb2e4170b5f4c7d77c52
         with:
           name: devspaces-remote-ssh
