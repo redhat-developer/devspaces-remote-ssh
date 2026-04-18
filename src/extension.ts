@@ -7,6 +7,7 @@ import path from 'path';
 import { unlinkSync, writeFileSync } from 'fs';
 import SSHConfig, { LineType } from 'ssh-config';
 import { getOcBinaryFilename, getOcCommand } from './utils/oc-binary';
+import { handleVSCodeURI } from './uriHandler';
 
 export let extStoragePath: vscode.Uri;
 export let channel: vscode.OutputChannel;
@@ -25,10 +26,17 @@ export async function activate(context: vscode.ExtensionContext) {
 
 	extStoragePath = context.globalStorageUri;
 
+	const devspacesUriHandler = vscode.window.registerUriHandler({
+		async handleUri(uri: vscode.Uri) {
+			await handleVSCodeURI(uri);
+		}
+	});
+
 	const connectCmd = vscode.commands.registerCommand('devspaces.connect.cluster', async () => {
 		if (!validateSSHExtension()) {
 			return;
 		}
+
 		const inputURL = await vscode.window.showInputBox({
 			title: 'Cluster URL',
 			prompt: 'Please enter the landing webpage URL of the "VS Code (desktop) (SSH)" editor to be connected',
@@ -36,56 +44,16 @@ export async function activate(context: vscode.ExtensionContext) {
 			ignoreFocusOut: true
 		});
 
+		updateRemoteSSHPlatform();
+
 		if (inputURL) {
-			const apiURL = await getOpenShiftApiURL(inputURL);
-			if (apiURL === undefined) {
-				vscode.window.showErrorMessage(
-					`The URL does not appear to be valid, and a connection could not be established.`);
-				return;
-			}
-
-			await callOcLogin(apiURL);
-
-			const projects: string[] = await getProjects();
-			await updateRemoteSSHTargets(projects);
-
-			const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);
-			// Match by workspace name from URL path (second segment) instead of full URL
-			// to support custom domains where the input URL differs from the DevWorkspace mainUrl
-			const inputPath = new URL(inputURL).pathname.split('/').filter(p => p !== '');
-			const workspaceName = inputPath.length >= 2 ? inputPath[1] : undefined;
-			const match : DevWorkspaceInfo | undefined = workspaceName
-				? devspaces.find(d => d.id === workspaceName)
-				: devspaces.find(d => d.url === inputURL);
-			if (match) {
-				const windowStrategy = vscode.workspace.getConfiguration().get('devspaces.ssh.window.strategy');
-				let choice;
-				if (windowStrategy === 'prompt') {
-					choice = await vscode.window.showQuickPick(
-						['Current Window', 'New Window'],
-						{ title: `Connect to ${match.id}`, placeHolder: 'Open connection in...' });
-				} else {
-					switch (windowStrategy) {
-						case 'current':
-							choice = 'Current Window';
-							break;
-						case 'new':
-							choice = 'New Window';
-							break;
-						default:
-							choice = 'Current Window';
-							break;
-					}
-				}
-
-				if (choice) {
-					await vscode.commands.executeCommand("vscode.newWindow", {
-						remoteAuthority: `ssh-remote+${match.id}`,
-						reuseWindow: choice === 'Current Window',
-					});
-				}
+			if (inputURL.startsWith('vscode://redhat.devspaces-remote-ssh')) {
+				await handleVSCodeURI(vscode.Uri.parse(inputURL));
+			} else {
+				await legacyConnectCommand(inputURL);
 			}
 		}
+
 	});
 
 	const updateDefaultProjectCmd = vscode.commands.registerCommand('devspaces.update.project', async () => {
@@ -110,6 +78,7 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(connectCmd);
 	context.subscriptions.push(updateDefaultProjectCmd);
 	context.subscriptions.push(getSSHDLogsCmd);
+	context.subscriptions.push(devspacesUriHandler);
 
 	if (!validateSSHExtension()) {
 		return;
@@ -182,7 +151,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 				const currPF = await getExistingPortForwardEntry(pod);
 				const localPort = currPF ? currPF.port : Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
 				const user = await getUser(pod);
-				const devspaceHostEntry = await generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
+				const devspaceHostEntry = generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
 				portForwardEntries.push({namespace: pod.project, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
 				devspaceHostEntriesData += devspaceHostEntry;
 			}
@@ -310,5 +279,55 @@ async function updateRemoteSSHPlatform() {
 	}
 }
 
+async function legacyConnectCommand(inputURL: string) {
+	const apiURL = await getOpenShiftApiURL(inputURL);
+	if (apiURL === undefined) {
+		vscode.window.showErrorMessage(
+			`The URL does not appear to be valid, and a connection could not be established.`);
+		return;
+	}
+
+	await callOcLogin(apiURL);
+
+	const projects: string[] = await getProjects();
+	await updateRemoteSSHTargets(projects);
+
+	const devspaces: DevWorkspaceInfo[] = await getDevWorkspaces(projects);
+	// Match by workspace name from URL path (second segment) instead of full URL
+	// to support custom domains where the input URL differs from the DevWorkspace mainUrl
+	const inputPath = new URL(inputURL).pathname.split('/').filter(p => p !== '');
+	const workspaceName = inputPath.length >= 2 ? inputPath[1] : undefined;
+	const match: DevWorkspaceInfo | undefined = workspaceName
+		? devspaces.find(d => d.id === workspaceName)
+		: devspaces.find(d => d.url === inputURL);
+	if (match) {
+		const windowStrategy = vscode.workspace.getConfiguration().get('devspaces.ssh.window.strategy');
+		let choice;
+		if (windowStrategy === 'prompt') {
+			choice = await vscode.window.showQuickPick(
+				['Current Window', 'New Window'],
+				{ title: `Connect to ${match.id}`, placeHolder: 'Open connection in...' });
+		} else {
+			switch (windowStrategy) {
+				case 'current':
+					choice = 'Current Window';
+					break;
+				case 'new':
+					choice = 'New Window';
+					break;
+				default:
+					choice = 'Current Window';
+					break;
+			}
+		}
+
+		if (choice) {
+			await vscode.commands.executeCommand("vscode.newWindow", {
+				remoteAuthority: `ssh-remote+${match.id}`,
+				reuseWindow: choice === 'Current Window',
+			});
+		}
+	}
+}
 export function deactivate() {
 }
