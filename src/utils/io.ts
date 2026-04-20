@@ -24,6 +24,7 @@ export function writeKeyFile(fileName: string, data: string): string {
 
 export function rememberPorts(portForwardEntries: PortForwardInfo[]) {
     const portFile = path.join(extStoragePath.fsPath, 'ports');
+    ensureExists(extStoragePath.fsPath);
     const portDataJson: PortForwardInfo[] = [];
     for (const pf of portForwardEntries) {
         portDataJson.push(pf);
