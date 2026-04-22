@@ -1,11 +1,11 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
 import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
-import { getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
+import { ensureExists, getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
 import { unlinkSync, writeFileSync } from 'fs';
-import SSHConfig, { Line, LineType } from 'ssh-config';
+import SSHConfig, { LineType } from 'ssh-config';
 import { getOcBinaryFilename, getOcCommand } from './utils/oc-binary';
 
 export let extStoragePath: vscode.Uri;
@@ -42,7 +42,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		const inputURL = await vscode.window.showInputBox({
 			title: 'Cluster URL',
 			prompt: 'Please enter the landing webpage URL of the "VS Code (desktop) (SSH)" editor to be connected',
-			placeHolder: 'https://devspaces.apps-crc.testing/developer/nodejs-web-app/3400/'
+			placeHolder: 'https://devspaces.apps-crc.testing/developer/nodejs-web-app/3400/',
+			ignoreFocusOut: true
 		});
 
 		if (inputURL) {
@@ -141,9 +142,10 @@ export function getSSHExtension() : string | undefined {
 async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	const sshdPods: PodInfo[] = await getPods(inputProjects);
 
-	// TODO: Create ssh config if not present
-	const sshConfigFile = path.join(homedir(), '.ssh', 'config');
-	const devspacesConfigFile = path.join(homedir(), '.ssh', 'devspaces.conf');
+	const sshConfigDir = path.join(homedir(), '.ssh');
+	const sshConfigFile = path.join(sshConfigDir, 'config');
+	const devspacesConfigFile = path.join(sshConfigDir, 'devspaces.conf');
+	ensureExists(sshConfigDir);
 
 	if (sshdPods.length === 0) {
 		writeFileSync(devspacesConfigFile, '', { mode: 0o600 });
@@ -180,17 +182,26 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	const sshData = readFile(sshConfigFile);
 	const sshConfig = SSHConfig.parse(sshData);
 
-	const hasConfig = sshConfig.find((line: Line, _index: number, _config: Line[]) => {
-		return line.type == LineType.DIRECTIVE
+	let count = 0;
+	for (const line of sshConfig) {
+		if (line.type == LineType.DIRECTIVE
 			&& line.param == 'Include'
 			&& typeof line.value == 'string'
-			&& line.value.includes('devspaces.conf');
-	});
+			&& line.value.includes('devspaces.conf')) {
+			count++;
+		}
+	}
 
-	if (!hasConfig) {
+	// Workaround for https://github.com/PowerShell/Win32-OpenSSH/issues/1511
+	if (count < 2) {
 		sshConfig.prepend({
-			Include: `${path.join(homedir(), '.ssh', 'devspaces.conf')}`
+			Include: 'devspaces.confg',
 		});
+		if (count == 0) {
+			sshConfig.prepend({
+				Include: `${devspacesConfigFile}`,
+			});
+		}
 	}
 
 	const newSSHData = SSHConfig.stringify(sshConfig);
