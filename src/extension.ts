@@ -24,21 +24,11 @@ export async function activate(context: vscode.ExtensionContext) {
 	}
 
 	extStoragePath = context.globalStorageUri;
-	const remoteSSHExtension = getSSHExtension();
-	if (remoteSSHExtension === undefined) {
-		vscode.window.showErrorMessage(`The "Dev Spaces Local/Remote Support - SSH"
-			extension requires the installation of either Remote - SSH (VS Code) OR
-			Open Remote - SSH (Code-based editors). Without one of these installed,
-			connecting to a cluster will not be possible.`);
-		return;
-	}
-
-	if (await isLoggedIn()) {
-		const projects: string[] = await getProjects();
-		updateRemoteSSHTargets(projects);
-	}
 
 	const connectCmd = vscode.commands.registerCommand('devspaces.connect.cluster', async () => {
+		if (!validateSSHExtension()) {
+			return;
+		}
 		const inputURL = await vscode.window.showInputBox({
 			title: 'Cluster URL',
 			prompt: 'Please enter the landing webpage URL of the "VS Code (desktop) (SSH)" editor to be connected',
@@ -103,6 +93,9 @@ export async function activate(context: vscode.ExtensionContext) {
 	});
 
 	const getSSHDLogsCmd = vscode.commands.registerCommand('devspaces.sshd.logs', async (element: SshItem) => {
+		if (!validateSSHExtension()) {
+			return;
+		}
 		const label: string = element.label;
 		const sshdPods: PodInfo[] = await getPods();
 		const match : PodInfo | undefined = sshdPods.find(p => p.id === label);
@@ -116,6 +109,15 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(connectCmd);
 	context.subscriptions.push(updateDefaultProjectCmd);
 	context.subscriptions.push(getSSHDLogsCmd);
+
+	if (!validateSSHExtension()) {
+		return;
+	}
+
+	if (await isLoggedIn()) {
+		const projects: string[] = await getProjects();
+		updateRemoteSSHTargets(projects);
+	}
 }
 
 interface SshItem {
@@ -137,6 +139,18 @@ export function getSSHExtension() : string | undefined {
 	} else {
 		return undefined;
 	}
+}
+
+export function validateSSHExtension(): boolean {
+	const remoteSSHExtension = getSSHExtension();
+	if (remoteSSHExtension === undefined) {
+		vscode.window.showErrorMessage(`The "Dev Spaces Local/Remote Support - SSH"
+			extension requires the installation of either Remote - SSH (VS Code) OR
+			Open Remote - SSH (Code-based editors). Without one of these installed,
+			connecting to a cluster will not be possible.`);
+		return false;
+	}
+	return true;
 }
 
 async function updateRemoteSSHTargets(inputProjects?: string[]) {
@@ -187,7 +201,14 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 		if (line.type == LineType.DIRECTIVE
 			&& line.param == 'Include'
 			&& typeof line.value == 'string'
-			&& line.value.includes('devspaces.conf')) {
+			&& line.value == 'devspaces.conf') {
+			count++;
+		}
+		if (line.type == LineType.DIRECTIVE
+			&& line.param == 'Include'
+			&& typeof line.value == 'string'
+			&& line.value.includes('devspaces.conf')
+			&& path.isAbsolute(line.value)) {
 			count++;
 		}
 	}
@@ -195,7 +216,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	// Workaround for https://github.com/PowerShell/Win32-OpenSSH/issues/1511
 	if (count < 2) {
 		sshConfig.prepend({
-			Include: 'devspaces.confg',
+			Include: 'devspaces.conf',
 		});
 		if (count == 0) {
 			sshConfig.prepend({
