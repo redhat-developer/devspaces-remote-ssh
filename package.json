@@ -40,7 +40,7 @@
 				{
 					"command": "devspaces.sshd.logs",
 					"group": "navigation",
-					"when": "viewItem == remote-explorer.sshRemoteTarget || viewItem =~ /^openremotessh.explorer.host$/"
+					"when": "viewItem == remote-explorer.sshRemoteTarget || viewItem =~ /^openremotessh.explorer.host$/ || viewItem =~ /^opensshremotes.explorer.host$/"
 				}
 			],
 			"view/title": [

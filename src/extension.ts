@@ -96,7 +96,8 @@ export async function activate(context: vscode.ExtensionContext) {
 		if (!validateSSHExtension()) {
 			return;
 		}
-		const label: string = element.label;
+
+		const label = element.label ?? element.hostname;
 		const sshdPods: PodInfo[] = await getPods();
 		const match : PodInfo | undefined = sshdPods.find(p => p.id === label);
 
@@ -121,7 +122,8 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 interface SshItem {
-    label: string;
+    label?: string | undefined; // VS Code & Code
+    hostname?: string | undefined; // Cursor
 }
 
 export function getDevSpacesOutputLog() : vscode.OutputChannel {
@@ -136,6 +138,8 @@ export function getSSHExtension() : string | undefined {
 		return 'microsoft';
 	} else if (vscode.extensions.getExtension('jeanp413.open-remote-ssh')) {
 		return 'open';
+	} else if (vscode.extensions.getExtension('anysphere.remote-ssh')) {
+		return 'cursor';
 	} else {
 		return undefined;
 	}
@@ -245,10 +249,13 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 		}
 	}
 
-	if (getSSHExtension() === 'microsoft') {
+	const remoteSSHExtension = getSSHExtension();
+	if (remoteSSHExtension === 'microsoft') {
 		vscode.commands.executeCommand('remote-explorer.refresh');
-	} else if (getSSHExtension() === 'open') {
+	} else if (remoteSSHExtension === 'open') {
 		vscode.commands.executeCommand('openremotessh.explorer.refresh');
+	} else if (remoteSSHExtension === 'cursor') {
+		vscode.commands.executeCommand('"opensshremotes.explorer.refresh"');
 	} else {
 		// do nothing
 	}
