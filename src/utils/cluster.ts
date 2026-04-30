@@ -142,7 +142,7 @@ export async function getPrivateKey(pod: PodInfo): Promise<string | undefined> {
     } else {
         mainContainer = await getDevWorkspaceMainPage(pod);
         // Try pre-configured key first (from User Preferences), fall back to auto-generated key
-        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}[ -e /etc/ssh/dwo_ssh_key ] && cat /etc/ssh/dwo_ssh_key || cat /sshd/ssh_client_ed25519_key${QUOTE}`, false, false, true);
+        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}[ -e /etc/ssh/dwo_ssh_key ] && cat /etc/ssh/dwo_ssh_key || cat /sshd/ssh_client_*key${QUOTE}`, false, false, true);
     }
     if (mainContainer) {
         const privateKey = privateKeyCmd.getOutput();
