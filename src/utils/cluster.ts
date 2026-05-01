@@ -240,7 +240,8 @@ Host ${devworkspaceId}
   Port ${port}
   User ${userName}
   IdentityFile "${identityPath}"
-  UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}`;
+  UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}
+  StrictHostKeyChecking no`;
 }
 
 export async function getExistingPortForwardEntry(pod: PodInfo): Promise<PortForwardInfo | undefined> {
