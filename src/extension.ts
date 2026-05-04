@@ -261,6 +261,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	}
 
 	updatePortForwarding(sshdPods, availablePortForwardEntries);
+	updateRemoteSSHPlatform();
 
 }
 
@@ -298,6 +299,16 @@ async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEn
 	rememberPorts(result);
 }
 
-export function deactivate() {
+/**
+ * Disable 'Select the platform of the remote host "${host}"' prompt
+ * All remote hosts are Linux containers
+ */
+async function updateRemoteSSHPlatform() {
+	const remotePlatformMap = vscode.workspace.getConfiguration('remote.SSH').get<Record<string, string>>('remotePlatform');
+	if (!remotePlatformMap || !remotePlatformMap['*']) {
+		vscode.workspace.getConfiguration().update('remote.SSH.remotePlatform', {'*': 'linux'}, vscode.ConfigurationTarget.Global);
+	}
 }
 
+export function deactivate() {
+}
