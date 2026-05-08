@@ -133,30 +133,22 @@ export async function createPortForward(namespace: string, podName: string, port
     return portForward;
 }
 
-export async function getPrivateKey(pod: PodInfo): Promise<string | undefined> {
+export async function getPrivateKey(pod: PodInfo, mainContainer?: string): Promise<string | undefined> {
     const privateKeyCmd: CliCommand = new CliCommand();
-    let mainContainer = undefined;
-    if (await isLegacyDevSpaces(pod)) {
-        mainContainer = 'che-code-sshd';
-        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
+    if (!mainContainer) {
+        await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c che-code-sshd -- /bin/bash -c ${QUOTE}cat $HOME/.ssh/ssh_client_ed25519_key${QUOTE}`, false, false, true);
     } else {
-        mainContainer = await getDevWorkspaceMainPage(pod);
         // Try pre-configured key first (from User Preferences), fall back to auto-generated key
         await privateKeyCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}[ -e /etc/ssh/dwo_ssh_key ] && cat /etc/ssh/dwo_ssh_key || cat /sshd/ssh_client_*key${QUOTE}`, false, false, true);
     }
-    if (mainContainer) {
-        const privateKey = privateKeyCmd.getOutput();
-        return privateKey;
-    }
-    return undefined;
+    const privateKey = privateKeyCmd.getOutput();
+    return privateKey;
 }
 
-export async function getUser(pod: PodInfo): Promise<string> {
+export async function getUser(pod: PodInfo, mainContainer?: string): Promise<string> {
     const whoamiCmd: CliCommand = new CliCommand();
-    let mainContainer = undefined;
-    if (await isLegacyDevSpaces(pod)) {
-        mainContainer = 'che-code-sshd';
-        await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- whoami`);
+    if (!mainContainer) {
+        await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c che-code-sshd -- whoami`);
     } else {
         mainContainer = await getDevWorkspaceMainPage(pod);
         await whoamiCmd.spawn(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- cat /sshd/username`);
@@ -353,13 +345,7 @@ export async function updateDefaultProject() {
 }
 
 export async function showSSHDLogs(pod: PodInfo, terminal: vscode.Terminal) {
-    let mainContainer = undefined;
-    if (await isLegacyDevSpaces(pod)) {
-        mainContainer = 'che-code-sshd';
-        terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
-    } else {
-        mainContainer = await getDevWorkspaceMainPage(pod);
-        terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
-    }
+    const mainContainer = await getDevWorkspaceMainPage(pod);
+    terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
     terminal.show();
 }
