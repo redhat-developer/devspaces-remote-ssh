@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject } from './utils/cluster';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject, getDevWorkspaceMainPage, isLegacyDevSpaces } from './utils/cluster';
 import { ensureExists, getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
@@ -144,13 +144,20 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	let devspaceHostEntriesData = '';
 	for (const pod of sshdPods) {
 		if (pod.project !== undefined && pod.name !== undefined && pod.id !== undefined) {
-			const privateKey = await getPrivateKey(pod);
+			const isLegacyPod = await isLegacyDevSpaces(pod);
+			let mainContainer = undefined;
+			if (isLegacyPod) {
+				mainContainer = 'che-code-sshd';
+			} else {
+				mainContainer = await getDevWorkspaceMainPage(pod);
+			}
+			const privateKey = await getPrivateKey(pod, mainContainer);
 			if (privateKey) {
 				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 
 				const currPF = await getExistingPortForwardEntry(pod);
 				const localPort = currPF ? currPF.port : Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
-				const user = await getUser(pod);
+				const user = await getUser(pod, mainContainer);
 				const devspaceHostEntry = generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
 				portForwardEntries.push({namespace: pod.project, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
 				devspaceHostEntriesData += devspaceHostEntry;
