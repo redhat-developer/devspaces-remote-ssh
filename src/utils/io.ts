@@ -2,6 +2,7 @@ import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmdirSync,
 import path from "path";
 import { extStoragePath } from "../extension";
 import { PortForwardInfo } from "./cluster";
+import SSHConfig, { LineType } from "ssh-config";
 
 export function readFile(filePath: string) : string {
     let content = '';
@@ -66,4 +67,41 @@ export function ensureExists(dir: string) {
     }
     ensureExists(path.dirname(dir));
     mkdirSync(dir);
+}
+
+export function ensureDevspacesConfigIncluded(sshConfigFile: string, devspacesConfigFile: string) {
+	const sshData = readFile(sshConfigFile);
+	const sshConfig = SSHConfig.parse(sshData);
+
+	let count = 0;
+	for (const line of sshConfig) {
+		if (line.type == LineType.DIRECTIVE
+			&& line.param == 'Include'
+			&& typeof line.value == 'string'
+			&& line.value == 'devspaces.conf') {
+			count++;
+		}
+		if (line.type == LineType.DIRECTIVE
+			&& line.param == 'Include'
+			&& typeof line.value == 'string'
+			&& line.value.includes('devspaces.conf')
+			&& path.isAbsolute(line.value)) {
+			count++;
+		}
+	}
+
+	// Workaround for https://github.com/PowerShell/Win32-OpenSSH/issues/1511
+	if (count < 2) {
+		sshConfig.prepend({
+			Include: 'devspaces.conf',
+		});
+		if (count == 0) {
+			sshConfig.prepend({
+				Include: `${devspacesConfigFile}`,
+			});
+		}
+	}
+
+	const newSSHData = SSHConfig.stringify(sshConfig);
+	writeFileSync(sshConfigFile, newSSHData, { mode: 0o600 });
 }
