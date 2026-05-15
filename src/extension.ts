@@ -1,13 +1,12 @@
 import * as vscode from 'vscode';
 import { CliCommand } from './utils/command';
-import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject, getDevWorkspaceMainPage, isLegacyDevSpaces } from './utils/cluster';
-import { ensureExists, getSavedPorts, readFile, rememberPorts, writeKeyFile } from './utils/io';
+import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, getDevWorkspaces, getExistingPortForwardEntry, getOpenShiftApiURL, getPods, getPrivateKey, getProjects, showSSHDLogs, getUser, isLoggedIn, isPortAvailable, PodInfo, PortForwardInfo, updateDefaultProject, getDevWorkspaceMainPage, isLegacyDevSpaces, updatePortForwarding } from './utils/cluster';
+import { ensureDevspacesConfigIncluded, ensureExists, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
-import { unlinkSync, writeFileSync } from 'fs';
-import SSHConfig, { LineType } from 'ssh-config';
+import { writeFileSync } from 'fs';
 import { getOcBinaryFilename, getOcCommand } from './utils/oc-binary';
-import { handleVSCodeURI } from './uriHandler';
+import { handleVSCodeURI } from './uri-handler';
 
 export let extStoragePath: vscode.Uri;
 export let channel: vscode.OutputChannel;
@@ -173,40 +172,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 
 	writeFileSync(devspacesConfigFile, devspaceHostEntriesData, { mode: 0o600 });
 
-	const sshData = readFile(sshConfigFile);
-	const sshConfig = SSHConfig.parse(sshData);
-
-	let count = 0;
-	for (const line of sshConfig) {
-		if (line.type == LineType.DIRECTIVE
-			&& line.param == 'Include'
-			&& typeof line.value == 'string'
-			&& line.value == 'devspaces.conf') {
-			count++;
-		}
-		if (line.type == LineType.DIRECTIVE
-			&& line.param == 'Include'
-			&& typeof line.value == 'string'
-			&& line.value.includes('devspaces.conf')
-			&& path.isAbsolute(line.value)) {
-			count++;
-		}
-	}
-
-	// Workaround for https://github.com/PowerShell/Win32-OpenSSH/issues/1511
-	if (count < 2) {
-		sshConfig.prepend({
-			Include: 'devspaces.conf',
-		});
-		if (count == 0) {
-			sshConfig.prepend({
-				Include: `${devspacesConfigFile}`,
-			});
-		}
-	}
-
-	const newSSHData = SSHConfig.stringify(sshConfig);
-	writeFileSync(sshConfigFile, newSSHData, { mode: 0o600 });
+	ensureDevspacesConfigIncluded(sshConfigFile, devspacesConfigFile);
 
 	for (const pf of portForwardEntries) {
 		if (pf.namespace && pf.name && pf.port && !pf.pid) {
@@ -231,7 +197,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	} else if (remoteSSHExtension === 'open') {
 		vscode.commands.executeCommand('openremotessh.explorer.refresh');
 	} else if (remoteSSHExtension === 'cursor') {
-		vscode.commands.executeCommand('"opensshremotes.explorer.refresh"');
+		vscode.commands.executeCommand('opensshremotes.explorer.refresh');
 	} else {
 		// do nothing
 	}
@@ -239,40 +205,6 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	updatePortForwarding(sshdPods, availablePortForwardEntries);
 	updateRemoteSSHPlatform();
 
-}
-
-async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEntries?: PortForwardInfo[]) {
-	const result: PortForwardInfo[] = [];
-	if (availablePortForwardEntries) {
-		result.push(...availablePortForwardEntries);
-	}
-
-	for (const pf of getSavedPorts()) {
-		const entryExists = result.some(e => e.name === pf.name && e.namespace === pf.namespace && e.port === pf.port);
-		const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name && p.project === pf.namespace) : false;
-		const portAvailable = await isPortAvailable(pf.port, 1000);
-		getDevSpacesOutputLog().appendLine(`pid: ${pf.pid} name: ${pf.name} ${podRunning ? '(running)' : '(stopped)'} ns: ${pf.namespace} port: ${pf.port} ${portAvailable ? '(available)' : '(stopped)'}`);
-		if (portAvailable && podRunning && !entryExists) {
-			result.push(pf);
-		} else if (!podRunning) {
-			try {
-				unlinkSync(path.join(extStoragePath.fsPath, '.ssh', `${pf.name}.key`));
-			// eslint-disable-next-line @typescript-eslint/no-unused-vars
-			} catch (err) {
-				// continue
-			}
-			if (pf.pid) {
-				try {
-					// process.kill(pf.pid, "SIGTERM");
-				// eslint-disable-next-line @typescript-eslint/no-unused-vars
-				} catch (err) {
-					// continue
-				}
-			}
-		}
-	}
-
-	rememberPorts(result);
 }
 
 /**
@@ -336,5 +268,7 @@ async function legacyConnectCommand(inputURL: string) {
 		}
 	}
 }
+
 export function deactivate() {
 }
+

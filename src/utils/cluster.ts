@@ -1,11 +1,13 @@
 import * as vscode from 'vscode';
 import { Socket } from "net";
-import { getDevSpacesOutputLog, ocCmd } from "../extension";
+import { extStoragePath, getDevSpacesOutputLog, ocCmd } from "../extension";
 import { CliCommand } from "./command";
 import { platform } from 'os';
-import { getSavedPorts } from "./io";
+import { getSavedPorts, rememberPorts } from "./io";
 import http from 'http';
 import https from 'https';
+import { unlinkSync } from 'fs';
+import path from 'path';
 
 const isWindows = process.platform.indexOf('win') === 0;
 // Need to preserve variables from being evaluated in the local shell
@@ -345,7 +347,47 @@ export async function updateDefaultProject() {
 }
 
 export async function showSSHDLogs(pod: PodInfo, terminal: vscode.Terminal) {
-    const mainContainer = await getDevWorkspaceMainPage(pod);
+    const isLegacyPod = await isLegacyDevSpaces(pod);
+    let mainContainer = undefined;
+    if (isLegacyPod) {
+        mainContainer = 'che-code-sshd';
+    } else {
+        mainContainer = await getDevWorkspaceMainPage(pod);
+    }
     terminal.sendText(`${ocCmd} exec -n ${pod.project} pods/${pod.name} -c ${mainContainer} -- /bin/bash -c ${QUOTE}cat /tmp/sshd.log${QUOTE}`);
     terminal.show();
+}
+
+export async function updatePortForwarding(sshdPods?: PodInfo[], availablePortForwardEntries?: PortForwardInfo[]) {
+    const result: PortForwardInfo[] = [];
+    if (availablePortForwardEntries) {
+        result.push(...availablePortForwardEntries);
+    }
+
+    for (const pf of getSavedPorts()) {
+        const entryExists = result.some(e => e.name === pf.name && e.namespace === pf.namespace && e.port === pf.port);
+        const podRunning : boolean = sshdPods ? sshdPods.some(p => p.name === pf.name && p.project === pf.namespace) : false;
+        const portAvailable = await isPortAvailable(pf.port, 1000);
+        getDevSpacesOutputLog().appendLine(`pid: ${pf.pid} name: ${pf.name} ${podRunning ? '(running)' : '(stopped)'} ns: ${pf.namespace} port: ${pf.port} ${portAvailable ? '(available)' : '(stopped)'}`);
+        if (portAvailable && podRunning && !entryExists) {
+            result.push(pf);
+        } else if (!podRunning) {
+            try {
+                unlinkSync(path.join(extStoragePath.fsPath, '.ssh', `${pf.name}.key`));
+            // eslint-disable-next-line @typescript-eslint/no-unused-vars
+            } catch (err) {
+                // continue
+            }
+            if (pf.pid) {
+                try {
+                    // process.kill(pf.pid, "SIGTERM");
+                // eslint-disable-next-line @typescript-eslint/no-unused-vars
+                } catch (err) {
+                    // continue
+                }
+            }
+        }
+    }
+
+    rememberPorts(result);
 }
