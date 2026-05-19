@@ -24,14 +24,17 @@ When `Visual Studio Code (desktop) (SSH)` is selected as an editor, it establish
 
 The extension provides two main workflows for connecting to a remote developer workspace :
 
-### 1. Using a developer workspace URL
+### 1. Using a developer workspace URI (`vscode://`)
+
+With Dev Spaces 3.28, the extension is able to connect to any developer workspace using the URI listed in the landing page. Refreshing the landing page, clicking the URI in a web browser, or entering the URI in the "Connect to Dev Spaces" input prompt, will cause VS Code-based editor to launch/initiate the connection.
+
+![](images/connect-with-devspaces-landing-page-uri.png)
+
+### 2. **(Deprecated)** Using a developer workspace URL
 
 With this workflow, simply providing the URL of the landing web page of the developer workspace. The URL will often be of the form : `https://${CLUSTER_URL}/${USER}/${DEVWORKSPACE_NAME}/3400/`
 
 ![](images/vscode-desktop-ssh-landing-page.png)
-
-> [!NOTE]
-> The instructions on the landing page need not be performed. They are automated by this extension.
 
 From the "Remote Explorer" view, select one of the "Connect to Dev Spaces" icons within the view and provide the landing page URL of the developer workspace (DevWorkspace).
 
@@ -39,7 +42,7 @@ From the "Remote Explorer" view, select one of the "Connect to Dev Spaces" icons
 
 This will redirect to the corresponding cluster's login web page. Once appropriate credentials have been entered, the existing VS Code instance will be connected to the remote developer workspace.
 
-### 2. From the Remote Explorer view
+### 3. From the Remote Explorer view
 
 If already logged into the cluster locally, a connection can be established in the current window, or a new one. Simply go into the "Remote Explorer" view and select a developer workspace under the "SSH" category.
 
