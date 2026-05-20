@@ -121,9 +121,9 @@ export async function isLegacyDevSpaces(pod: PodInfo): Promise<boolean> {
 
 export async function getDevWorkspaceMainPage(pod: PodInfo): Promise<string | undefined> {
     const mainContainerCmd: CliCommand = new CliCommand();
-    await mainContainerCmd.spawn(`${ocCmd} get devworkspace -n ${pod.project} ${pod.id} -o "jsonpath={.spec.template.components[0].name}"`);
-    const mainContainer = mainContainerCmd.getOutput();
-    return mainContainer;
+    await mainContainerCmd.spawn(`${ocCmd} get devworkspace -n ${pod.project} ${pod.id} -o ${QUOTE}jsonpath={range .spec.template.components[?(@.container)]};{.name}{end}${QUOTE}`);
+    const output = mainContainerCmd.getOutput();
+    return output ? output.substring(1).split(';')[0] : undefined;
 }
 
 export async function createPortForward(namespace: string, podName: string, port: number): Promise<CliCommand> {
