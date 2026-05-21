@@ -56,6 +56,13 @@ Generally, a newly released version of the extension will still be compatible wi
 | -------- | -------- | -------- | -------- |
 | **Extension version** | 0.3.1+ | 0.3.1+ | 0.3.1+ |
 
+## Settings
+
+- `devspaces.ssh.log` - Log to the Output view information regarding command execution for possible debugging.
+- `devspaces.ssh.update.interval` - The interval, in milliseconds (ms), at which SSH targets are synchronized to the Remote Explorer view, when logged into a cluster.
+- `devspaces.ssh.window.strategy` - How connecting to a developer workspace should be done.
+
+
 ## Developing the extension
 
 - Run `npm install` in terminal to install dependencies

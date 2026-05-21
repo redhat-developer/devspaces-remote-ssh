@@ -51,8 +51,8 @@ export class CliCommand implements Disposable {
                 if (code != null) {
                     this.exiteCode = code;
                 }
-                CliCommand.channel.appendLine(`\n > ${command}`);
                 if (!logRealTime) {
+                    CliCommand.channel.appendLine(`\n > ${command}`);
                     if (suppressOutput) {
                         CliCommand.channel.append('[Output Suppressed]');
                     } else {
@@ -64,6 +64,7 @@ export class CliCommand implements Disposable {
                         }
                     }
                 }
+                CliCommand.channel.appendLine('');
                 resolve(undefined);
             });
         });

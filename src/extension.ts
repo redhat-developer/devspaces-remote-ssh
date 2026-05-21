@@ -79,14 +79,36 @@ export async function activate(context: vscode.ExtensionContext) {
 	context.subscriptions.push(getSSHDLogsCmd);
 	context.subscriptions.push(devspacesUriHandler);
 
+	let isDisposed = false;
+	context.subscriptions.push({
+		dispose: () => { isDisposed = true; }
+	});
+
 	if (!validateSSHExtension()) {
 		return;
 	}
 
 	if (await isLoggedIn()) {
-		const projects: string[] = await getProjects();
-		updateRemoteSSHTargets(projects);
+		const updateSSHTargetsJob = async () => {
+			const interval: number | undefined = vscode.workspace.getConfiguration().get('devspaces.ssh.update.interval');
+			if (!isDisposed) {
+				try {
+					getDevSpacesOutputLog().appendLine('Begin Update SSH Targets Job');
+					const start = Date.now();
+					const projects: string[] = await getProjects();
+					await updateRemoteSSHTargets(projects);
+					getDevSpacesOutputLog().appendLine(`Completed Update SSH Targets Job in ${Date.now() - start} ms.`);
+				// eslint-disable-next-line @typescript-eslint/no-unused-vars
+				} catch (err) {
+					// continue
+				} finally {
+					setTimeout(updateSSHTargetsJob, interval ? interval : 10000);
+				}
+			}
+		};
+		updateSSHTargetsJob();
 	}
+
 }
 
 interface SshItem {
@@ -95,8 +117,13 @@ interface SshItem {
 }
 
 export function getDevSpacesOutputLog() : vscode.OutputChannel {
+	const shouldLog: boolean | undefined = vscode.workspace.getConfiguration().get('devspaces.ssh.log');
 	if (channel === undefined) {
 		channel = vscode.window.createOutputChannel('Red Hat OpenShift Dev Spaces');
+	}
+	if (!shouldLog) {
+		channel.appendLine = () => {};
+		channel.append = () => {};
 	}
 	return channel;
 }
@@ -136,6 +163,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	if (sshdPods.length === 0) {
 		writeFileSync(devspacesConfigFile, '', { mode: 0o600 });
 		updatePortForwarding();
+		refreshRemoteExplorerView();
 		return;
 	}
 
@@ -167,6 +195,7 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 	if (devspaceHostEntriesData.length === 0) {
 		writeFileSync(devspacesConfigFile, '', { mode: 0o600 });
 		updatePortForwarding();
+		refreshRemoteExplorerView();
 		return;
 	}
 
@@ -191,19 +220,9 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 		}
 	}
 
-	const remoteSSHExtension = getSSHExtension();
-	if (remoteSSHExtension === 'microsoft') {
-		vscode.commands.executeCommand('remote-explorer.refresh');
-	} else if (remoteSSHExtension === 'open') {
-		vscode.commands.executeCommand('openremotessh.explorer.refresh');
-	} else if (remoteSSHExtension === 'cursor') {
-		vscode.commands.executeCommand('opensshremotes.explorer.refresh');
-	} else {
-		// do nothing
-	}
-
 	updatePortForwarding(sshdPods, availablePortForwardEntries);
 	updateRemoteSSHPlatform();
+	refreshRemoteExplorerView();
 
 }
 
@@ -266,6 +285,19 @@ async function legacyConnectCommand(inputURL: string) {
 				reuseWindow: choice === 'Current Window',
 			});
 		}
+	}
+}
+
+function refreshRemoteExplorerView() {
+	const remoteSSHExtension = getSSHExtension();
+	if (remoteSSHExtension === 'microsoft') {
+		vscode.commands.executeCommand('remote-explorer.refresh');
+	} else if (remoteSSHExtension === 'open') {
+		vscode.commands.executeCommand('openremotessh.explorer.refresh');
+	} else if (remoteSSHExtension === 'cursor') {
+		vscode.commands.executeCommand('"opensshremotes.explorer.refresh"');
+	} else {
+		// do nothing
 	}
 }
 

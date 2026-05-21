@@ -75,6 +75,12 @@
 		"configuration": {
 			"title": "Dev Spaces Local/Remote Support - SSH",
 			"properties": {
+				"devspaces.ssh.log": {
+					"type": "boolean",
+					"default": false,
+					"markdownDescription": "Log to the Output view information regarding command execution for possible debugging.",
+					"scope": "window"
+				},
 				"devspaces.ssh.window.strategy": {
 					"type": "string",
 					"enum": [
@@ -89,6 +95,12 @@
 					],
 					"default": "current",
 					"markdownDescription": "How connecting to a developer workspace should be done.",
+					"scope": "window"
+				},
+				"devspaces.ssh.update.interval": {
+					"type": "number",
+					"default": 10000,
+					"markdownDescription": "The interval, in milliseconds (ms), at which SSH targets are synchronized to the Remote Explorer view, when logged into a cluster.",
 					"scope": "window"
 				}
 			}
