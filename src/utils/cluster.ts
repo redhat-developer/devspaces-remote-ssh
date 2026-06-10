@@ -234,6 +234,7 @@ Host ${devworkspaceId}
   Port ${port}
   User ${userName}
   IdentityFile "${identityPath}"
+  IdentitiesOnly yes
   UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}
   StrictHostKeyChecking no`;
 }
