@@ -43,7 +43,7 @@ export async function isLoggedIn() : Promise<boolean> {
 }
 export async function callOcLogin(apiURL : string) {
     const loginCmd: CliCommand = new CliCommand();
-    await loginCmd.spawn(`${ocCmd} login --server=${apiURL} --web`);
+    await loginCmd.spawn(`${ocCmd} login --insecure-skip-tls-verify --server=${apiURL} --web`);
 }
 
 export async function getDevWorkspaces(inputProjects?: string[]): Promise<DevWorkspaceInfo[]> {
