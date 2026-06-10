@@ -21,7 +21,8 @@
 		"ssh"
 	],
 	"activationEvents": [
-		"onView:remoteTargets"
+		"onView:remoteTargets",
+		"onUri"
 	],
 	"main": "./out/extension.js",
 	"contributes": {
