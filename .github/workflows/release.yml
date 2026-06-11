@@ -121,7 +121,6 @@ jobs:
         uses: actions/download-artifact@v5
       - name: Publish to VS Code Marketplace
         if: ${{ github.event_name == 'schedule' || inputs.publishToMarketPlace == 'true' || inputs.publishPreRelease == 'true' }}
-        continue-on-error: true
         run: |
           for platformVsix in devspaces-remote-ssh-*-${GITHUB_RUN_NUMBER}.vsix; do
             vsce publish --skip-duplicate -p ${{ secrets.VSCODE_MARKETPLACE_TOKEN }} --packagePath ${platformVsix}

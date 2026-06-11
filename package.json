@@ -24,9 +24,6 @@
 		"onView:remoteTargets",
 		"onUri"
 	],
-	"enabledApiProposals": [
-		"resolvers"
-	],
 	"main": "./out/extension.js",
 	"contributes": {
 		"menus": {
