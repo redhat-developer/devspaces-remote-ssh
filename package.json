@@ -124,7 +124,7 @@
 		"@types/fs-extra": "^11.0.0",
 		"@types/node": "^22",
 		"@types/vscode": "^1.79.0",
-		"adm-zip": "^0.5.16",
+		"adm-zip": "^0.6.0",
 		"eslint": "^9.39.2",
 		"fs-extra": "^11.3.0",
 		"tar": "^7.4.3",
