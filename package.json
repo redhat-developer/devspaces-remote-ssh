@@ -125,10 +125,10 @@
 		"@types/node": "^22",
 		"@types/vscode": "^1.79.0",
 		"adm-zip": "^0.5.16",
-		"eslint": "^9.39.2",
+		"eslint": "^10.8.0",
 		"fs-extra": "^11.3.0",
 		"tar": "^7.4.3",
 		"typescript": "^5.9.3",
-		"typescript-eslint": "^8.56.0"
+		"typescript-eslint": "^8.65.0"
 	}
 }
