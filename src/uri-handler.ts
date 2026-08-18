@@ -7,6 +7,12 @@ import { appendFileSync } from 'fs';
 import path from 'path';
 import { homedir } from 'os';
 
+// https://kubernetes.io/docs/concepts/overview/working-with-objects/names/#dns-label-names
+const KB_NAME_PATTERN = '^(([a-z0-9][-a-z0-9]*)?[a-z0-9])?$';
+// https://github.com/eclipse-che/che-dashboard/blob/main/packages/dashboard-frontend/src/pages/WorkspaceDetails/OverviewTab/WorkspaceName/index.tsx
+const DW_NAME_PATTERN = '^(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])?$';
+const USERNAME_PATTERN = '^[a-zA-Z0-9_.-]+$';
+
 export async function handleVSCodeURI(uri: vscode.Uri) {
     const qParams = new URLSearchParams(uri.query);
     const namespace = qParams.get('namespace');
@@ -18,6 +24,10 @@ export async function handleVSCodeURI(uri: vscode.Uri) {
     getDevSpacesOutputLog().appendLine(`Connecting to dwName: ${dwName}, namespace: ${namespace}, podName: ${podName}, userName: ${userName}, dashboardURL: ${dashboardURL}`);
 
     if (!namespace || !podName || !dwName || !userName || !keyContent || !dashboardURL) {
+        return;
+    }
+
+    if (!hasValidParameters(namespace, podName, dwName, userName)) {
         return;
     }
 
@@ -78,4 +88,31 @@ export async function handleVSCodeURI(uri: vscode.Uri) {
         reuseWindow: false,
     });
 
+}
+
+function hasValidParameters(namespace: string, podName: string, dwName: string, userName: string) : boolean {
+    let message = '';
+    if (!namespace.match(KB_NAME_PATTERN)) {
+        message += `, ${namespace}`;
+    }
+
+    if (!podName.match(KB_NAME_PATTERN)) {
+        message += `, ${podName}`;
+    }
+
+    if (!dwName.match(DW_NAME_PATTERN)) {
+        message += `, ${dwName}`;
+    }
+
+    if (!userName.match(USERNAME_PATTERN)) {
+        message += `, ${userName}`;
+    }
+
+    if (message.length > 0) {
+        vscode.window.showErrorMessage(
+            `The following parameters are not valid : ${message.substring(1)}`);
+        return false;
+    }
+
+    return true;
 }
