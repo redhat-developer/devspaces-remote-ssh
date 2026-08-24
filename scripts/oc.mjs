@@ -113,9 +113,9 @@ async function extractFromZip(archivePath, filename, destPath) {
 /**
  * Downloads and packages the 'oc' binary for a specific platform
  * @param {string} vscodePlatform - The VS Code platform identifier
- * @param {string} version - The OpenShift client version (default: '4.21.5')
+ * @param {string} version - The OpenShift client version (default: '4.22.11')
  */
-async function packageOc(vscodePlatform, version = '4.21.5') {
+async function packageOc(vscodePlatform, version = '4.22.11') {
     // Validate platform
     const ocPlatform = PLATFORM_MAP[vscodePlatform];
     if (!ocPlatform) {
@@ -175,7 +175,7 @@ Supported platforms:
 
 Arguments:
   vscode-platform   The VS Code platform identifier (required)
-  version           OpenShift client version (optional, default: 4.21.5)
+  version           OpenShift client version (optional, default: 4.22.11)
 
 Examples:
   node scripts/oc.mjs linux-x64

@@ -36,7 +36,7 @@ Commands:
     package-oc <platform> [version]     Package 'oc' binary for a specific platform
                                         Platforms: win32-x64, win32-arm64, linux-x64,
                                                    linux-arm64, darwin-x64, darwin-arm64
-                                        Version: defaults to 4.21.5
+                                        Version: defaults to 4.22.11
 
 Examples:
   node scripts/index.js prepare-pre-release
