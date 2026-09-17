@@ -23,7 +23,7 @@ export async function handleVSCodeURI(uri: vscode.Uri) {
     let dashboardURL = qParams.get('url');
     getDevSpacesOutputLog().appendLine(`Connecting to dwName: ${dwName}, namespace: ${namespace}, podName: ${podName}, userName: ${userName}, dashboardURL: ${dashboardURL}`);
 
-    if (!namespace || !podName || !dwName || !userName || !keyContent || !dashboardURL) {
+    if (!namespace || !podName || !dwName || !userName || !dashboardURL) {
         return;
     }
 
@@ -31,7 +31,9 @@ export async function handleVSCodeURI(uri: vscode.Uri) {
         return;
     }
 
-    keyContent = Buffer.from(keyContent, 'base64').toString();
+    if (keyContent) {
+        keyContent = Buffer.from(keyContent, 'base64').toString();
+    }
     dashboardURL = decodeURIComponent(dashboardURL);
 
     const apiURL = await getOpenShiftApiURL(dashboardURL);
@@ -52,7 +54,10 @@ export async function handleVSCodeURI(uri: vscode.Uri) {
     const currPF = await getExistingPortForwardEntry(pod);
     const localPort = currPF ? currPF.port : Math.floor(((2 ** 16 - 1) - 1024) * Math.random()) + 1024;
 
-    const privateKeyFile = writeKeyFile(`${podName}.key`, keyContent);
+    let privateKeyFile;
+    if (keyContent) {
+        privateKeyFile = writeKeyFile(`${podName}.key`, keyContent);
+    }
     const devspaceHostEntry = generateHostEntry(podName, dwName, localPort, userName, privateKeyFile);
 
     appendFileSync(devspacesConfigFile, devspaceHostEntry);

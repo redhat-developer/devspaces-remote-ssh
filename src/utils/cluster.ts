@@ -227,16 +227,17 @@ export async function getOpenShiftApiURL(inputURL: string): Promise<string | und
     }
 }
 
-export function generateHostEntry(podName: string, devworkspaceId: string, port : number, userName: string, identityPath: string): string {
-    return`
-Host ${devworkspaceId}
-  HostName 127.0.0.1
-  Port ${port}
-  User ${userName}
-  IdentityFile "${identityPath}"
-  IdentitiesOnly yes
-  UserKnownHostsFile ${platform() == 'win32' ? 'nul' : '/dev/null'}
-  StrictHostKeyChecking no`;
+export function generateHostEntry(podName: string, devworkspaceId: string, port: number, userName: string, identityPath: string | undefined): string {
+    return [
+        `Host ${devworkspaceId}`,
+        `  HostName 127.0.0.1`,
+        `  Port ${port}`,
+        `  User ${userName}`,
+        identityPath ? `  IdentityFile ${identityPath}` : null,
+        identityPath ? `  IdentitiesOnly yes` : null,
+        `  UserKnownHostsFile ${platform() === 'win32' ? 'nul' : '/dev/null'}`,
+        `  StrictHostKeyChecking no`
+    ].filter(Boolean).join('\n');
 }
 
 export async function getExistingPortForwardEntry(pod: PodInfo): Promise<PortForwardInfo | undefined> {

@@ -179,16 +179,17 @@ async function updateRemoteSSHTargets(inputProjects?: string[]) {
 				mainContainer = await getDevWorkspaceMainPage(pod);
 			}
 			const privateKey = await getPrivateKey(pod, mainContainer);
+			let privateKeyFile;
 			if (privateKey) {
-				const privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
-
-				const currPF = await getExistingPortForwardEntry(pod);
-				const localPort = currPF ? currPF.port : Math.floor(((2**16 - 1) - 1024) * Math.random()) + 1024;
-				const user = await getUser(pod, mainContainer);
-				const devspaceHostEntry = generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
-				portForwardEntries.push({namespace: pod.project, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined});
-				devspaceHostEntriesData += devspaceHostEntry;
+				privateKeyFile = writeKeyFile(`${pod.name}.key`, privateKey);
 			}
+
+			const currPF = await getExistingPortForwardEntry(pod);
+			const localPort = currPF ? currPF.port : Math.floor(((2 ** 16 - 1) - 1024) * Math.random()) + 1024;
+			const user = await getUser(pod, mainContainer);
+			const devspaceHostEntry = generateHostEntry(pod.name, pod.id, localPort, user, privateKeyFile);
+			portForwardEntries.push({ namespace: pod.project, name: pod.name, port: localPort, pid: currPF ? currPF.pid : undefined });
+			devspaceHostEntriesData += devspaceHostEntry;
 		}
 	}
 
