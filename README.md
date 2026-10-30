@@ -54,7 +54,7 @@ Generally, a newly released version of the extension will still be compatible wi
 
 | Dev Spaces Version | 3.28 | 3.29 | 3.30 | 3.31 |
 | -------- | -------- | -------- | -------- | -------- |
-| **Extension version** | 0.4.0+ | 0.5.0+ | 0.5.0+ | 0.7.0+
+| **Extension version** | 0.4.0+ | 0.5.0+ | 0.5.0+ | 0.7.0+ |
 
 ## Settings
 

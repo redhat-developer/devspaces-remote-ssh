@@ -4,7 +4,7 @@ import { callOcLogin, createPortForward, DevWorkspaceInfo, generateHostEntry, ge
 import { ensureDevspacesConfigIncluded, ensureExists, writeKeyFile } from './utils/io';
 import { homedir } from 'os';
 import path from 'path';
-import { writeFileSync } from 'fs';
+import { readFileSync, writeFileSync } from 'fs';
 import { getOcBinaryFilename, getOcCommand } from './utils/oc-binary';
 import { handleVSCodeURI } from './uri-handler';
 
@@ -37,16 +37,20 @@ export async function activate(context: vscode.ExtensionContext) {
 		}
 
 		const inputURL = await vscode.window.showInputBox({
-			title: 'Cluster URL',
-			prompt: 'Please enter the landing webpage URL of the "VS Code (desktop) (SSH)" editor to be connected',
-			placeHolder: 'https://devspaces.apps-crc.testing/developer/nodejs-web-app/3400/',
+			title: 'Developer Workspace URI',
+			prompt: 'Please enter the connection URI displayed on workspace landing page to be connected',
+			placeHolder: 'vscode://redhat.devspaces-remote-ssh?namespace=mynamespace&podName=workspace-abc-def&userName=user&dwName=dw-sample&url=https%3A%2F%2Fdevspaces.apps.example.com',
 			ignoreFocusOut: true
 		});
 
 		updateRemoteSSHPlatform();
 
 		if (inputURL) {
-			if (inputURL.startsWith('vscode://redhat.devspaces-remote-ssh')) {
+			const productJsonPath = path.join(vscode.env.appRoot, 'product.json');
+			const raw = readFileSync(productJsonPath, 'utf-8');
+			const product = JSON.parse(raw);
+			const ideProtocol = product.urlProtocol;
+			if (ideProtocol && inputURL.startsWith(`${ideProtocol}://redhat.devspaces-remote-ssh`)) {
 				await handleVSCodeURI(vscode.Uri.parse(inputURL));
 			} else {
 				await legacyConnectCommand(inputURL);
@@ -235,6 +239,22 @@ async function updateRemoteSSHPlatform() {
 	const remotePlatformMap = vscode.workspace.getConfiguration('remote.SSH').get<Record<string, string>>('remotePlatform');
 	if (!remotePlatformMap || !remotePlatformMap['*']) {
 		vscode.workspace.getConfiguration().update('remote.SSH.remotePlatform', {'*': 'linux'}, vscode.ConfigurationTarget.Global);
+	}
+
+	const remoteSSHExtension = getSSHExtension();
+	// Only on https://github.com/jeanp413/open-remote-ssh/pull/334
+	if (remoteSSHExtension !== 'microsoft') {
+		const verifyUnknownHosts = vscode.workspace.getConfiguration('remote.SSH').inspect('verifyUnknownHosts');
+		if (verifyUnknownHosts) {
+			const isModified = 
+			verifyUnknownHosts.globalValue !== undefined ||
+			verifyUnknownHosts.workspaceValue !== undefined ||
+			verifyUnknownHosts.workspaceFolderValue !== undefined ||
+			(verifyUnknownHosts.languageIds !== undefined && verifyUnknownHosts.languageIds.length > 0);
+			if (!isModified) {
+				vscode.workspace.getConfiguration().update('remote.SSH.verifyUnknownHosts', 'accept', vscode.ConfigurationTarget.Global);
+			}
+		}
 	}
 }
 
