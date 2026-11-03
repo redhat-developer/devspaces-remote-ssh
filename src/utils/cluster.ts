@@ -228,7 +228,7 @@ export async function getOpenShiftApiURL(inputURL: string): Promise<string | und
 }
 
 export function generateHostEntry(podName: string, devworkspaceId: string, port: number, userName: string, identityPath: string | undefined): string {
-    return [
+    return '\n' + [
         `Host ${devworkspaceId}`,
         `  HostName 127.0.0.1`,
         `  Port ${port}`,
