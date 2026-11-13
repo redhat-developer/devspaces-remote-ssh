@@ -111,6 +111,7 @@
 		"vscode:prepublish": "npm run compile",
 		"compile": "tsc -p ./",
 		"lint": "eslint",
+		"test": "tsc -p ./ && node --test test/api-url.test.cjs",
 		"watch": "tsc -watch -p ./",
 		"prepare-pre-release": "node scripts/index.mjs prepare-pre-release",
 		"package-oc": "node scripts/index.mjs package-oc"
