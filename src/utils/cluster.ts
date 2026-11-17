@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { Socket } from "net";
 import { extStoragePath, getDevSpacesOutputLog, ocCmd } from "../extension";
+import { ingressSuffix, resolveOpenShiftApiURL } from "./api-url";
 import { CliCommand } from "./command";
 import { platform } from 'os';
 import { getSavedPorts, rememberPorts } from "./io";
@@ -159,72 +160,100 @@ export async function getUser(pod: PodInfo, mainContainer?: string): Promise<str
     return whoami;
 }
 
+const OAUTH_REDIRECT_STATUSES = new Set([301, 302, 303, 307, 308]);
+
+function headerLocation(location: string | string[] | undefined): string | undefined {
+    if (Array.isArray(location)) {
+        return location[0];
+    }
+    return location;
+}
+
 /**
- * Resolves the OpenShift API URL from a DevSpaces workspace URL.
+ * Reads the Location of GET /oauth/start without following it.
+ * The extension only needs the hostname; the browser login happens later
+ * through oc login --web.
+ */
+async function readOAuthStartRedirect(oauthStartURL: string): Promise<string | undefined> {
+    const endpoint = new URL(oauthStartURL);
+    return new Promise((resolve) => {
+        let settled = false;
+        const mod = endpoint.protocol === 'https:' ? https : http;
+        const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: http.IncomingMessage) => {
+            res.resume();
+            const location = headerLocation(res.headers.location);
+            if (res.statusCode !== undefined && OAUTH_REDIRECT_STATUSES.has(res.statusCode) && location) {
+                finish(location);
+            } else {
+                finish(undefined);
+            }
+        });
+        const timer = setTimeout(() => {
+            req.destroy();
+            finish(undefined);
+        }, 10000);
+        req.on('error', () => finish(undefined));
+
+        function finish(value: string | undefined) {
+            if (settled) {
+                return;
+            }
+            settled = true;
+            clearTimeout(timer);
+            resolve(value);
+        }
+    });
+}
+
+/**
+ * Resolves the OpenShift API URL from a Dev Spaces workspace URL.
  *
- * Hits the /oauth/start endpoint on the DevSpaces host (unauthenticated) which
- * redirects to oauth-openshift.apps.<cluster-domain>. The cluster domain is
- * extracted and the API URL is derived as https://api.<cluster-domain>:6443.
- * If this approach fails, falls back to extracting host directly from the
- * original URL.
- *
- * Works for both standard (.apps.) and custom domain URLs.
- * Uses Node.js https module instead of curl for cross-platform compatibility.
+ * GET /oauth/start redirects to the OAuth route. That route is
+ * oauth-openshift.apps.<cluster-domain> unless Ingress spec.componentRoutes
+ * has replaced the hostname. A replaced hostname is not the cluster domain.
+ * resolveOpenShiftApiURL keeps the API server on the cluster apps domain in
+ * that case, and still uses a default OAuth hostname when the Dev Spaces host
+ * itself is a custom domain.
  */
 export async function getOpenShiftApiURL(inputURL: string): Promise<string | undefined> {
+    let redirectURL: string | undefined;
     try {
         const host = new URL(inputURL);
         const oauthStartURL = `${host.protocol}//${host.host}/oauth/start`;
-
         getDevSpacesOutputLog().appendLine(`Discovering cluster API URL via ${oauthStartURL}`);
-
-        // Follow the /oauth/start redirect to discover the real cluster hostname
-        const redirectURL = await new Promise<string | undefined>((resolve) => {
-            const mod = host.protocol === 'https:' ? https : http;
-            const req = mod.get(oauthStartURL, { rejectUnauthorized: false }, (res: http.IncomingMessage) => {
-                if (res.statusCode === 302 && res.headers.location) {
-                    resolve(res.headers.location);
-                } else {
-                    resolve(undefined);
-                }
-            });
-            req.on('error', () => resolve(undefined));
-            req.setTimeout(10000, () => { req.destroy(); resolve(undefined); });
-        });
-
-        if (redirectURL) {
-            // Redirect URL is: https://oauth-openshift.apps.<cluster-domain>/oauth/authorize?...
-            // Strip "oauth-openshift.apps." prefix to get the cluster domain
-            const oauthHost = new URL(redirectURL).hostname;
-            const prefix = 'oauth-openshift.apps.';
-            if (oauthHost.startsWith(prefix)) {
-                const clusterDomain = oauthHost.substring(prefix.length);
-                const apiURL = `https://api.${clusterDomain}:6443`;
-                getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
-                return apiURL;
-            } else {
-                getDevSpacesOutputLog().appendLine(`Unexpected OAuth hostname: ${oauthHost}`);
-            }
-        } else {
+        redirectURL = await readOAuthStartRedirect(oauthStartURL);
+        if (!redirectURL) {
             getDevSpacesOutputLog().appendLine('No redirect received from /oauth/start');
         }
-
-        // Fall back to basic approach
-        let key = '';
-        if (host.host.indexOf('.apps-') > 0) {
-            key = '.apps-';
-        } else if (host.host.indexOf('.apps.') > 0) {
-            key = '.apps.';
-        } else {
-            return undefined;
-        }
-
-        const hostTLD = `${host.host.substring(host.host.indexOf(key) + key.length)}`;
-        return `${host.protocol}//api.${hostTLD}:6443`;
     } catch (err) {
         getDevSpacesOutputLog().appendLine(String(err));
+    }
+
+    const apiURL = resolveOpenShiftApiURL(inputURL, redirectURL);
+    if (!apiURL) {
+        getDevSpacesOutputLog().appendLine('Could not resolve the OpenShift API URL from the Dev Spaces route or the OAuth redirect.');
         return undefined;
     }
+
+    if (redirectURL) {
+        try {
+            const oauthHost = new URL(redirectURL, inputURL).hostname;
+            const suffix = ingressSuffix(new URL(inputURL).hostname);
+            const isDefaultRoute = !!suffix && oauthHost === `oauth-openshift${suffix}`;
+            if (!isDefaultRoute && suffix) {
+                getDevSpacesOutputLog().appendLine(
+                    `OAuth route hostname ${oauthHost} is not the default route. Deriving the API server from the Dev Spaces route.`
+                );
+            } else if (!suffix) {
+                getDevSpacesOutputLog().appendLine(`OAuth route hostname is ${oauthHost}.`);
+            }
+        } catch (err) {
+            getDevSpacesOutputLog().appendLine(String(err));
+        }
+    }
+
+    getDevSpacesOutputLog().appendLine(`Resolved API URL: ${apiURL}`);
+    return apiURL;
 }
 
 export function generateHostEntry(podName: string, devworkspaceId: string, port: number, userName: string, identityPath: string | undefined): string {
