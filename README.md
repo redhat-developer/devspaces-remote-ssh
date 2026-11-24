@@ -52,9 +52,9 @@ If already logged into the cluster locally, a connection can be established in t
 
 Generally, a newly released version of the extension will still be compatible with older Dev Spaces (eg. 3.24+). It is always recommended to be running a version of this extension that was released after the Dev Spaces version it is targetting.
 
-| Dev Spaces Version | 3.28 | 3.29 | 3.30 | 3.31 |
+| Dev Spaces Version | 3.29 | 3.30 | 3.31 | 3.32 |
 | -------- | -------- | -------- | -------- | -------- |
-| **Extension version** | 0.4.0+ | 0.5.0+ | 0.5.0+ | 0.7.0+ |
+| **Extension version** | 0.5.0+ | 0.5.0+ | 0.7.1+ | 0.7.1+ |
 
 ## Settings
 
